@@ -1,0 +1,64 @@
+{
+    "toplevel": [
+        {
+            "category": "Home - Active Systems",
+            "filesystems": [
+                {
+                    "name": "RED / Quartz",
+                    "path": "~"
+                },
+                {
+                    "name": "Big Red 200",
+                    "path": "~/../BigRed200"
+                }
+            ]
+        },
+        {
+            "category": "Home - Retired Systems",
+            "filesystems": [
+                {
+                    "name": "Carbonate",
+                    "path": "~/../Carbonate"
+                },
+                {
+                    "name": "Big Red 2",
+                    "path": "~/../BigRed2"
+                },
+                {
+                    "name": "Big Red 3",
+                    "path": "~/../BigRed3"
+                },
+                {
+                    "name": "Big Red 2 Plus",
+                    "path": "~/../BR2Plus"
+                }
+            ]
+        },
+        {
+            "category": "Slate",
+            "filesystems": [
+                {
+                    "name": "Slate",
+                    "path": "/N/slate/$USER"
+                },
+                {
+                    "name": "Slate Scratch",
+                    "path": "/N/scratch/$USER"
+                },
+                {
+                    "category": "Slate Project",
+                    "filesystems": [
+                        {
+                            "name": "hcp_dcwan",
+                            "path": "/N/project/hcp_dcwan"
+                        },
+                        {
+                            "name": "QuarryIU",
+                            "path": "/N/scratch/QuarryIU"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

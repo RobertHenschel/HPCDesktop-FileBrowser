@@ -108,6 +108,7 @@ class FileBrowser(QMainWindow):
         
         # Connect signals
         self.sidebar.filesystem_selected.connect(self.on_filesystem_selected)
+        self.sidebar.add_current_path_requested.connect(self.on_add_current_path_requested)
         self.file_display.directory_changed.connect(self.on_directory_changed)
         self.toolbar.navigate_up.connect(self.on_navigate_up)
         self.toolbar.refresh_requested.connect(self.on_refresh_requested)
@@ -131,6 +132,9 @@ class FileBrowser(QMainWindow):
         can_go_up = parent_dir != expanded_path and os.path.exists(parent_dir)
         self.toolbar.enable_navigation(up=can_go_up)
         
+        # Update sidebar with current path for the Add Current Path button
+        self.sidebar.set_current_path(expanded_path)
+        
         # Update file display
         self.file_display.set_filesystem(name, path)
     
@@ -142,6 +146,9 @@ class FileBrowser(QMainWindow):
         parent_dir = os.path.dirname(new_path)
         can_go_up = parent_dir != new_path and os.path.exists(parent_dir)
         self.toolbar.enable_navigation(up=can_go_up)
+        
+        # Update sidebar with current path for the Add Current Path button
+        self.sidebar.set_current_path(new_path)
     
     def on_navigate_up(self):
         """Handle navigate up button click"""
@@ -156,6 +163,36 @@ class FileBrowser(QMainWindow):
     def on_refresh_requested(self):
         """Handle refresh button click"""
         self.file_display.refresh()
+    
+    def closeEvent(self, event):
+        """Handle application close event"""
+        # Save custom paths before closing
+        self.sidebar.save_on_close()
+        event.accept()
+    
+    def on_add_current_path_requested(self):
+        """Handle request to add current path to custom paths"""
+        current_path = self.file_display.get_current_path()
+        if current_path:
+            # Generate a name for the custom path (use the directory name)
+            path_name = os.path.basename(current_path) or "Root"
+            
+            # If name is empty or just "/", use the parent directory name
+            if not path_name or path_name == "/":
+                parent_path = os.path.dirname(current_path)
+                path_name = os.path.basename(parent_path) or "Root"
+            
+            # Make sure the name is unique
+            existing_names = [cp['name'] for cp in self.sidebar.custom_paths]
+            original_name = path_name
+            counter = 1
+            while path_name in existing_names:
+                path_name = f"{original_name} ({counter})"
+                counter += 1
+            
+            # Add the custom path to sidebar
+            self.sidebar.add_custom_path(path_name, current_path)
+            print(f"Added custom path: {path_name} -> {current_path}")
 
 
 def main():

@@ -126,9 +126,6 @@ class FileBrowser(QMainWindow):
         # Expand user path for checking (path already has $USER expanded from config)
         expanded_path = os.path.expanduser(path)
         
-        # Update toolbar with current path
-        self.toolbar.set_current_path(expanded_path)
-        
         # Enable/disable navigation buttons
         parent_dir = os.path.dirname(expanded_path)
         can_go_up = parent_dir != expanded_path and os.path.exists(parent_dir)
@@ -141,9 +138,6 @@ class FileBrowser(QMainWindow):
         """Handle directory navigation within file display"""
         print(f"Directory changed to: {new_path}")
         
-        # Update toolbar with new path
-        self.toolbar.set_current_path(new_path)
-        
         # Enable/disable navigation buttons
         parent_dir = os.path.dirname(new_path)
         can_go_up = parent_dir != new_path and os.path.exists(parent_dir)
@@ -155,9 +149,9 @@ class FileBrowser(QMainWindow):
         if current_path:
             parent_path = os.path.dirname(current_path)
             if parent_path != current_path and os.path.exists(parent_path):
-                self.file_display.load_directory_contents(parent_path)
                 self.file_display.current_path = parent_path
-                self.file_display.path_label.setText(f"Path: {parent_path}")
+                self.file_display.update_breadcrumb(parent_path)
+                self.file_display.load_directory_contents(parent_path)
     
     def on_refresh_requested(self):
         """Handle refresh button click"""

@@ -20,6 +20,13 @@ class Sidebar(QWidget):
         layout.setContentsMargins(5, 5, 5, 5)
         layout.setSpacing(5)
         
+        # Title area to match file display header height
+        title_frame = QFrame()
+        title_frame.setMinimumHeight(35)  # Adjusted to match exactly
+        title_layout = QVBoxLayout(title_frame)
+        title_layout.setContentsMargins(0, 0, 0, 0)
+        title_layout.setSpacing(5)
+        
         # Title label
         title_label = QLabel("File Systems")
         title_font = QFont()
@@ -27,13 +34,9 @@ class Sidebar(QWidget):
         title_font.setPointSize(12)
         title_label.setFont(title_font)
         title_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(title_label)
+        title_layout.addWidget(title_label)
         
-        # Separator
-        separator = QFrame()
-        separator.setFrameShape(QFrame.HLine)
-        separator.setFrameShadow(QFrame.Sunken)
-        layout.addWidget(separator)
+        layout.addWidget(title_frame)
         
         # Tree widget for filesystem hierarchy
         self.tree_widget = QTreeWidget()

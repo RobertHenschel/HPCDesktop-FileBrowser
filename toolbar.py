@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import (QWidget, QHBoxLayout, QToolBar, QPushButton, 
-                             QLabel, QLineEdit, QFrame)
+                             QLabel, QFrame)
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QIcon
 
@@ -10,7 +10,6 @@ class Toolbar(QWidget):
     navigate_forward = pyqtSignal()
     navigate_up = pyqtSignal()
     refresh_requested = pyqtSignal()
-    path_changed = pyqtSignal(str)
     
     def __init__(self):
         super().__init__()
@@ -53,22 +52,6 @@ class Toolbar(QWidget):
         self.refresh_button.setFixedSize(30, 30)
         layout.addWidget(self.refresh_button)
         
-        # Separator
-        separator2 = QFrame()
-        separator2.setFrameShape(QFrame.VLine)
-        separator2.setFrameShadow(QFrame.Sunken)
-        layout.addWidget(separator2)
-        
-        # Path label
-        path_label = QLabel("Path:")
-        layout.addWidget(path_label)
-        
-        # Path display/input
-        self.path_input = QLineEdit()
-        self.path_input.setPlaceholderText("Select a filesystem from the sidebar")
-        self.path_input.setReadOnly(True)  # Make read-only for now
-        layout.addWidget(self.path_input)
-        
         # Add stretch to push everything to the left
         layout.addStretch()
         
@@ -80,24 +63,9 @@ class Toolbar(QWidget):
         self.forward_button.clicked.connect(self.navigate_forward.emit)
         self.up_button.clicked.connect(self.navigate_up.emit)
         self.refresh_button.clicked.connect(self.refresh_requested.emit)
-        self.path_input.returnPressed.connect(self.on_path_entered)
-    
-    def on_path_entered(self):
-        """Handle path input when user presses Enter"""
-        path = self.path_input.text().strip()
-        if path:
-            self.path_changed.emit(path)
-    
-    def set_current_path(self, path):
-        """Set the current path in the toolbar"""
-        self.path_input.setText(path)
     
     def enable_navigation(self, back=False, forward=False, up=False):
         """Enable/disable navigation buttons"""
         self.back_button.setEnabled(back)
         self.forward_button.setEnabled(forward)
-        self.up_button.setEnabled(up)
-    
-    def set_path_editable(self, editable=True):
-        """Make the path input editable or read-only"""
-        self.path_input.setReadOnly(not editable) 
+        self.up_button.setEnabled(up) 

@@ -1,7 +1,8 @@
 import os
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QLabel, QFrame, 
                              QTableWidget, QListWidget, QStackedWidget, 
-                             QListWidgetItem, QGridLayout, QScrollArea)
+                             QListWidgetItem, QGridLayout, QScrollArea, 
+                             QHBoxLayout, QPushButton)
 from PyQt5.QtCore import Qt, pyqtSignal, QSize
 from PyQt5.QtGui import QFont, QIcon, QPixmap, QPainter
 from PyQt5.QtSvg import QSvgRenderer
@@ -51,32 +52,48 @@ class FileDisplay(QWidget):
     def setup_ui(self):
         """Setup the file display UI"""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(10)
+        layout.setContentsMargins(5, 5, 5, 5)
+        layout.setSpacing(5)
         
-        # Header with current location info
-        self.header_frame = QFrame()
-        self.header_frame.setFrameStyle(QFrame.Box)
-        self.header_frame.setMaximumHeight(60)
-        header_layout = QVBoxLayout(self.header_frame)
+        # Breadcrumb navigation - match sidebar title area height
+        self.breadcrumb_frame = QFrame()
+        self.breadcrumb_frame.setMinimumHeight(35)  # Match sidebar title + separator height
+        self.breadcrumb_layout = QHBoxLayout(self.breadcrumb_frame)
+        self.breadcrumb_layout.setContentsMargins(5, 5, 5, 5)
+        self.breadcrumb_layout.setSpacing(0)
         
-        self.location_label = QLabel("No filesystem selected")
-        location_font = QFont()
-        location_font.setBold(True)
-        location_font.setPointSize(11)
-        self.location_label.setFont(location_font)
-        header_layout.addWidget(self.location_label)
+        # Title label (similar to sidebar)
+        self.breadcrumb_title = QLabel("Path")
+        title_font = QFont()
+        title_font.setBold(True)
+        title_font.setPointSize(12)
+        self.breadcrumb_title.setFont(title_font)
+        self.breadcrumb_title.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.breadcrumb_layout.addWidget(self.breadcrumb_title)
         
-        self.path_label = QLabel("Select a filesystem from the sidebar to begin browsing")
-        path_font = QFont()
-        path_font.setPointSize(9)
-        self.path_label.setFont(path_font)
-        self.path_label.setStyleSheet("color: #666666;")
-        header_layout.addWidget(self.path_label)
+        # Separator between title and breadcrumb
+        separator_label = QLabel(":")
+        separator_label.setStyleSheet("margin: 0 5px;")
+        self.breadcrumb_layout.addWidget(separator_label)
         
-        layout.addWidget(self.header_frame)
+        # Container for breadcrumb buttons
+        self.breadcrumb_container = QWidget()
+        self.breadcrumb_container_layout = QHBoxLayout(self.breadcrumb_container)
+        self.breadcrumb_container_layout.setContentsMargins(0, 0, 0, 0)
+        self.breadcrumb_container_layout.setSpacing(0)
+        self.breadcrumb_layout.addWidget(self.breadcrumb_container)
         
-        # Main content area (placeholder for now)
+        # Add stretch to push breadcrumb to the left
+        self.breadcrumb_layout.addStretch()
+        
+        # Default message
+        self.default_breadcrumb = QLabel("Select a filesystem from the sidebar")
+        self.default_breadcrumb.setStyleSheet("color: #666666; font-style: italic;")
+        self.breadcrumb_container_layout.addWidget(self.default_breadcrumb)
+        
+        layout.addWidget(self.breadcrumb_frame)
+        
+        # Main content area
         self.content_widget = QStackedWidget()
         
         # Welcome page
@@ -130,8 +147,9 @@ class FileDisplay(QWidget):
         expanded_path = os.path.expanduser(path)
         
         self.current_path = expanded_path
-        self.location_label.setText(f"Filesystem: {name}")
-        self.path_label.setText(f"Path: {expanded_path}")
+        
+        # Update breadcrumb navigation
+        self.update_breadcrumb(expanded_path)
         
         # Load and display directory contents
         self.load_directory_contents(expanded_path)
@@ -240,7 +258,10 @@ class FileDisplay(QWidget):
             # Navigate into directory
             new_path = data['path']
             self.current_path = new_path
-            self.path_label.setText(f"Path: {new_path}")
+            
+            # Update breadcrumb navigation
+            self.update_breadcrumb(new_path)
+            
             self.load_directory_contents(new_path)
             
             # Emit signal for other components
@@ -254,8 +275,7 @@ class FileDisplay(QWidget):
     def clear_display(self):
         """Clear the file display and return to welcome screen"""
         self.current_path = ""
-        self.location_label.setText("No filesystem selected")
-        self.path_label.setText("Select a filesystem from the sidebar to begin browsing")
+        self.clear_breadcrumb()
         self.content_widget.setCurrentIndex(0)
     
     def refresh(self):
@@ -266,4 +286,94 @@ class FileDisplay(QWidget):
         
     def get_current_path(self):
         """Get the current path being displayed"""
-        return self.current_path 
+        return self.current_path
+    
+    def update_breadcrumb(self, path):
+        """Update the breadcrumb navigation with the current path"""
+        # Clear existing breadcrumb buttons
+        self.clear_breadcrumb_buttons()
+        
+        # Hide default message  
+        self.default_breadcrumb.hide()
+        
+        # Simple approach: just split the current path and display it
+        # Remove any trailing slash except for root
+        clean_path = path.rstrip('/') if path != '/' else '/'
+        
+        # Split the path into segments
+        if clean_path == '/':
+            segments = ['/']
+        else:
+            # Split by '/' and filter out empty strings
+            parts = [p for p in clean_path.split('/') if p]
+            segments = ['/'] + parts
+        
+        # Create breadcrumb buttons for each segment
+        for i, segment in enumerate(segments):
+            # Add separator before each segment (except the first)
+            if i > 0:
+                separator = QLabel("/")
+                separator.setStyleSheet("color: #666666; margin: 0 2px;")
+                self.breadcrumb_container_layout.addWidget(separator)
+            
+            # Create the clickable button
+            button = QPushButton(segment)
+            button.setFlat(True)
+            button.setStyleSheet("""
+                QPushButton {
+                    border: none;
+                    padding: 2px 4px;
+                    text-align: left;
+                    color: #0066cc;
+                    background: transparent;
+                }
+                QPushButton:hover {
+                    background-color: #e6f3ff;
+                    border-radius: 3px;
+                }
+                QPushButton:pressed {
+                    background-color: #cce6ff;
+                }
+            """)
+            
+            # Build the path for this segment
+            if i == 0:
+                # Root segment
+                target_path = "/"
+            else:
+                # Build path from root to this segment
+                target_path = "/" + "/".join(segments[1:i+1])
+            
+            # Connect the click handler
+            button.clicked.connect(lambda checked, tp=target_path: self.navigate_to_breadcrumb_path(tp))
+            
+            self.breadcrumb_container_layout.addWidget(button)
+    
+    def clear_breadcrumb(self):
+        """Clear breadcrumb and show default message"""
+        self.clear_breadcrumb_buttons()
+        self.default_breadcrumb.show()
+    
+    def clear_breadcrumb_buttons(self):
+        """Remove all breadcrumb buttons and separators"""
+        # Remove all widgets except the default_breadcrumb
+        while self.breadcrumb_container_layout.count() > 0:
+            child = self.breadcrumb_container_layout.takeAt(0)
+            if child.widget() and child.widget() != self.default_breadcrumb:
+                child.widget().deleteLater()
+        
+        # Re-add the default_breadcrumb to ensure it's in the layout
+        if self.default_breadcrumb.parent() is None:
+            self.breadcrumb_container_layout.addWidget(self.default_breadcrumb)
+    
+    def navigate_to_breadcrumb_path(self, path):
+        """Navigate to a path clicked in the breadcrumb"""
+        if os.path.exists(path) and os.path.isdir(path):
+            self.current_path = path
+            self.update_breadcrumb(path)
+            self.load_directory_contents(path)
+            
+            # Emit signal for other components
+            self.directory_changed.emit(path)
+        else:
+            print(f"Cannot navigate to {path}: path does not exist or is not a directory") 

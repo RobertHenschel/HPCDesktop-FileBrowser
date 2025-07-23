@@ -1,11 +1,120 @@
 import os
+import time
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QLabel, QFrame, 
                              QTableWidget, QListWidget, QStackedWidget, 
                              QListWidgetItem, QGridLayout, QScrollArea, 
-                             QHBoxLayout, QPushButton)
-from PyQt5.QtCore import Qt, pyqtSignal, QSize
-from PyQt5.QtGui import QFont, QIcon, QPixmap, QPainter
+                             QHBoxLayout, QPushButton, QProgressBar)
+from PyQt5.QtCore import Qt, pyqtSignal, QSize, QThread, QTimer, QPropertyAnimation, QEasingCurve
+from PyQt5.QtGui import QFont, QIcon, QPixmap, QPainter, QTransform
 from PyQt5.QtSvg import QSvgRenderer
+
+
+class DirectoryWorker(QThread):
+    """Worker thread for loading directory contents without blocking the UI"""
+    # Signals
+    contents_loaded = pyqtSignal(list)  # [(name, is_dir, path), ...]
+    error_occurred = pyqtSignal(str)
+    
+    def __init__(self, path):
+        super().__init__()
+        self.path = path
+        self._cancelled = False
+    
+    def cancel(self):
+        """Cancel the current operation"""
+        self._cancelled = True
+        
+    def run(self):
+        """Load directory contents in background thread"""
+        try:
+            if self._cancelled:
+                return
+                
+            if not os.path.exists(self.path):
+                if not self._cancelled:
+                    self.error_occurred.emit(f"Path does not exist: {self.path}")
+                return
+                
+            if not os.path.isdir(self.path):
+                if not self._cancelled:
+                    self.error_occurred.emit(f"Path is not a directory: {self.path}")
+                return
+            
+            if not os.access(self.path, os.R_OK):
+                if not self._cancelled:
+                    self.error_occurred.emit(f"Permission denied: {self.path}")
+                return
+            
+            # Get directory contents
+            entries = []
+            try:
+                for entry in os.listdir(self.path):
+                    if self._cancelled:
+                        return
+                    entry_path = os.path.join(self.path, entry)
+                    is_dir = os.path.isdir(entry_path)
+                    entries.append((entry, is_dir, entry_path))
+            except PermissionError:
+                if not self._cancelled:
+                    self.error_occurred.emit(f"Permission denied reading directory: {self.path}")
+                return
+            
+            if self._cancelled:
+                return
+                
+            # Sort entries: directories first, then files, both alphabetically
+            entries.sort(key=lambda x: (not x[1], x[0].lower()))
+            
+            if not self._cancelled:
+                self.contents_loaded.emit(entries)
+                
+        except Exception as e:
+            if not self._cancelled:
+                self.error_occurred.emit(f"Error loading directory: {str(e)}")
+
+
+class SpinningBusyIndicator(QLabel):
+    """A spinning busy indicator widget using animated dots"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(60, 20)
+        self.setAlignment(Qt.AlignCenter)
+        
+        # Use animated dots instead of rotating character
+        self.dots = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+        self.current_frame = 0
+        
+        self.setStyleSheet("""
+            QLabel {
+                color: #666666;
+                font-size: 12px;
+                font-weight: normal;
+                background: transparent;
+            }
+        """)
+        
+        # Setup animation timer
+        self.animation_timer = QTimer()
+        self.animation_timer.timeout.connect(self.update_animation)
+        self.hide()  # Start hidden
+    
+    def start_spinning(self):
+        """Start the spinning animation"""
+        self.setText("⠋ Loading...")
+        self.show()
+        self.animation_timer.start(100)  # Update every 100ms
+    
+    def stop_spinning(self):
+        """Stop the spinning animation"""
+        self.animation_timer.stop()
+        self.hide()
+        self.current_frame = 0
+    
+    def update_animation(self):
+        """Update the animation frame"""
+        self.current_frame = (self.current_frame + 1) % len(self.dots)
+        self.setText(f"{self.dots[self.current_frame]} Loading...")
 
 
 class FileDisplay(QWidget):
@@ -19,8 +128,18 @@ class FileDisplay(QWidget):
         self.current_filesystem_name = ""
         self.folder_icon = None
         self.file_icon = None
+        self.worker = None  # Current directory loading worker
         self.load_icons()
         self.setup_ui()
+    
+    def closeEvent(self, event):
+        """Clean up when widget is being destroyed"""
+        self._cleanup_worker()
+        event.accept()
+    
+    def __del__(self):
+        """Destructor - ensure cleanup"""
+        self._cleanup_worker()
     
     def load_icons(self):
         """Load SVG icons for files and folders"""
@@ -85,6 +204,10 @@ class FileDisplay(QWidget):
         
         # Add stretch to push breadcrumb to the left
         self.breadcrumb_layout.addStretch()
+        
+        # Busy indicator (right-aligned)
+        self.busy_indicator = SpinningBusyIndicator()
+        self.breadcrumb_layout.addWidget(self.busy_indicator)
         
         # Default message
         self.default_breadcrumb = QLabel("Select a filesystem from the sidebar")
@@ -155,46 +278,66 @@ class FileDisplay(QWidget):
         self.load_directory_contents(expanded_path)
     
     def load_directory_contents(self, path):
-        """Load and display the contents of a directory"""
-        try:
-            # Switch to file list view
-            self.content_widget.setCurrentIndex(1)
+        """Load and display the contents of a directory using threaded loading"""
+        # Cancel and cleanup any existing worker
+        self._cleanup_worker()
+        
+        # Switch to file list view
+        self.content_widget.setCurrentIndex(1)
+        
+        # Clear existing content
+        self.file_list_widget.clear()
+        
+        # Show busy indicator
+        self.busy_indicator.start_spinning()
+        
+        # Start worker thread
+        self.worker = DirectoryWorker(path)
+        self.worker.contents_loaded.connect(self.on_contents_loaded)
+        self.worker.error_occurred.connect(self.on_loading_error)
+        self.worker.finished.connect(self.on_loading_finished)
+        self.worker.start()
+    
+    def _cleanup_worker(self):
+        """Safely cleanup the current worker thread"""
+        if self.worker:
+            # Cancel the worker
+            self.worker.cancel()
             
-            # Clear existing content
-            self.file_list_widget.clear()
-            
-            if not os.path.exists(path):
-                self.show_error(f"Path does not exist: {path}")
-                return
-                
-            if not os.path.isdir(path):
-                self.show_error(f"Path is not a directory: {path}")
-                return
-            
-            if not os.access(path, os.R_OK):
-                self.show_error(f"Permission denied: {path}")
-                return
-            
-            # Get directory contents
-            entries = []
+            # Disconnect all signals to prevent issues during cleanup
             try:
-                for entry in os.listdir(path):
-                    entry_path = os.path.join(path, entry)
-                    is_dir = os.path.isdir(entry_path)
-                    entries.append((entry, is_dir, entry_path))
-            except PermissionError:
-                self.show_error(f"Permission denied reading directory: {path}")
-                return
+                self.worker.contents_loaded.disconnect()
+                self.worker.error_occurred.disconnect() 
+                self.worker.finished.disconnect()
+            except TypeError:
+                # Signals might already be disconnected
+                pass
             
-            # Sort entries: directories first, then files, both alphabetically
-            entries.sort(key=lambda x: (not x[1], x[0].lower()))
+            # Force termination if still running
+            if self.worker.isRunning():
+                self.worker.terminate()
+                if not self.worker.wait(2000):  # Wait up to 2 seconds
+                    print("Warning: Worker thread did not terminate cleanly")
             
-            # Add entries to the list
-            for entry_name, is_dir, entry_path in entries:
-                self.add_file_item(entry_name, is_dir, entry_path)
-                
-        except Exception as e:
-            self.show_error(f"Error loading directory: {str(e)}")
+            # Clean up the worker object
+            self.worker.deleteLater()
+            self.worker = None
+    
+    def on_contents_loaded(self, entries):
+        """Handle successful directory contents loading"""
+        # Add entries to the list
+        for entry_name, is_dir, entry_path in entries:
+            self.add_file_item(entry_name, is_dir, entry_path)
+    
+    def on_loading_error(self, error_message):
+        """Handle directory loading error"""
+        self.show_error(error_message)
+    
+    def on_loading_finished(self):
+        """Handle completion of directory loading (success or error)"""
+        self.busy_indicator.stop_spinning()
+        # Don't cleanup worker here - let it be handled by _cleanup_worker() 
+        # when the next operation starts, or when the widget is destroyed
     
     def add_file_item(self, name, is_dir, full_path):
         """Add a file or directory item to the list"""

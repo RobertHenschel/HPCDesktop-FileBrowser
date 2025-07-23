@@ -3,7 +3,7 @@ import time
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QLabel, QFrame, 
                              QTableWidget, QListWidget, QStackedWidget, 
                              QListWidgetItem, QGridLayout, QScrollArea, 
-                             QHBoxLayout, QPushButton, QProgressBar)
+                             QHBoxLayout, QPushButton, QProgressBar, QToolBar, QAction)
 from PyQt5.QtCore import Qt, pyqtSignal, QSize, QThread, QTimer, QPropertyAnimation, QEasingCurve
 from PyQt5.QtGui import QFont, QIcon, QPixmap, QPainter, QTransform
 from PyQt5.QtSvg import QSvgRenderer
@@ -73,6 +73,82 @@ class DirectoryWorker(QThread):
                 self.error_occurred.emit(f"Error loading directory: {str(e)}")
 
 
+class VerticalToolbar(QWidget):
+    """Vertical toolbar with zoom controls for the file display"""
+    
+    # Signals
+    zoom_in_requested = pyqtSignal()
+    zoom_out_requested = pyqtSignal()
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedWidth(40)
+        self.setup_ui()
+        
+    def setup_ui(self):
+        """Setup the vertical toolbar UI"""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(5, 10, 5, 10)
+        layout.setSpacing(5)
+        
+        # Zoom In button (Plus)
+        self.zoom_in_btn = QPushButton("+")
+        self.zoom_in_btn.setFixedSize(30, 30)
+        self.zoom_in_btn.setStyleSheet("""
+            QPushButton {
+                font-size: 16px;
+                font-weight: bold;
+                background-color: #f0f0f0;
+                border: 2px outset #d0d0d0;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #e0e0e0;
+            }
+            QPushButton:pressed {
+                border: 2px inset #d0d0d0;
+                background-color: #d0d0d0;
+            }
+        """)
+        self.zoom_in_btn.clicked.connect(self.zoom_in_requested.emit)
+        self.zoom_in_btn.setToolTip("Zoom In")
+        layout.addWidget(self.zoom_in_btn)
+        
+        # Zoom Out button (Minus)
+        self.zoom_out_btn = QPushButton("−")
+        self.zoom_out_btn.setFixedSize(30, 30)
+        self.zoom_out_btn.setStyleSheet("""
+            QPushButton {
+                font-size: 16px;
+                font-weight: bold;
+                background-color: #f0f0f0;
+                border: 2px outset #d0d0d0;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #e0e0e0;
+            }
+            QPushButton:pressed {
+                border: 2px inset #d0d0d0;
+                background-color: #d0d0d0;
+            }
+        """)
+        self.zoom_out_btn.clicked.connect(self.zoom_out_requested.emit)
+        self.zoom_out_btn.setToolTip("Zoom Out")
+        layout.addWidget(self.zoom_out_btn)
+        
+        # Add stretch to push buttons to top
+        layout.addStretch()
+        
+        # Style the toolbar background
+        self.setStyleSheet("""
+            VerticalToolbar {
+                background-color: #f8f8f8;
+                border-right: 1px solid #cccccc;
+            }
+        """)
+
+
 class SpinningBusyIndicator(QLabel):
     """A spinning busy indicator widget using animated dots"""
     
@@ -129,6 +205,11 @@ class FileDisplay(QWidget):
         self.folder_icon = None
         self.file_icon = None
         self.worker = None  # Current directory loading worker
+        
+        # Zoom levels for icon view
+        self.zoom_levels = [32, 48, 64, 80, 96, 128]  # Icon sizes
+        self.current_zoom_index = 2  # Start at 64px (index 2)
+        
         self.load_icons()
         self.setup_ui()
     
@@ -141,12 +222,12 @@ class FileDisplay(QWidget):
         """Destructor - ensure cleanup"""
         self._cleanup_worker()
     
-    def load_icons(self):
-        """Load SVG icons for files and folders"""
+    def load_icons(self, icon_size=64):
+        """Load SVG icons for files and folders at the specified size"""
         try:
             # Load folder icon
             folder_renderer = QSvgRenderer("resources/folder.svg")
-            folder_pixmap = QPixmap(64, 64)
+            folder_pixmap = QPixmap(icon_size, icon_size)
             folder_pixmap.fill(Qt.transparent)
             painter = QPainter(folder_pixmap)
             folder_renderer.render(painter)
@@ -155,7 +236,7 @@ class FileDisplay(QWidget):
             
             # Load file icon
             file_renderer = QSvgRenderer("resources/file.svg")
-            file_pixmap = QPixmap(64, 64)
+            file_pixmap = QPixmap(icon_size, icon_size)
             file_pixmap.fill(Qt.transparent)
             painter = QPainter(file_pixmap)
             file_renderer.render(painter)
@@ -216,6 +297,17 @@ class FileDisplay(QWidget):
         
         layout.addWidget(self.breadcrumb_frame)
         
+        # Create horizontal layout for toolbar and content
+        content_layout = QHBoxLayout()
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
+        
+        # Vertical toolbar on the left
+        self.toolbar = VerticalToolbar()
+        self.toolbar.zoom_in_requested.connect(self.zoom_in)
+        self.toolbar.zoom_out_requested.connect(self.zoom_out)
+        content_layout.addWidget(self.toolbar)
+        
         # Main content area
         self.content_widget = QStackedWidget()
         
@@ -244,8 +336,12 @@ class FileDisplay(QWidget):
         self.file_list_widget = QListWidget()
         self.file_list_widget.setViewMode(QListWidget.IconMode)
         self.file_list_widget.setResizeMode(QListWidget.Adjust)
-        self.file_list_widget.setGridSize(QSize(120, 100))
-        self.file_list_widget.setIconSize(QSize(64, 64))
+        # Set initial grid and icon size based on zoom level
+        self.update_zoom_level()
+        
+        # Store original sizes for calculation
+        self.base_grid_size = QSize(120, 100)
+        self.base_icon_size = QSize(64, 64)
         self.file_list_widget.setUniformItemSizes(True)
         self.file_list_widget.setWordWrap(True)
         self.file_list_widget.setSpacing(10)
@@ -260,7 +356,16 @@ class FileDisplay(QWidget):
         # Set default to welcome page
         self.content_widget.setCurrentIndex(0)
         
-        layout.addWidget(self.content_widget)
+        # Add content widget to horizontal layout
+        content_layout.addWidget(self.content_widget)
+        
+        # Create container widget for the horizontal layout
+        content_container = QWidget()
+        content_container.setLayout(content_layout)
+        layout.addWidget(content_container)
+        
+        # Initialize zoom level and button states
+        self.update_zoom_level()
     
     def set_filesystem(self, name, path):
         """Set the current filesystem being displayed"""
@@ -430,6 +535,53 @@ class FileDisplay(QWidget):
     def get_current_path(self):
         """Get the current path being displayed"""
         return self.current_path
+    
+    def zoom_in(self):
+        """Increase the icon size (zoom in)"""
+        if self.current_zoom_index < len(self.zoom_levels) - 1:
+            self.current_zoom_index += 1
+            self.update_zoom_level()
+    
+    def zoom_out(self):
+        """Decrease the icon size (zoom out)"""
+        if self.current_zoom_index > 0:
+            self.current_zoom_index -= 1
+            self.update_zoom_level()
+    
+    def update_zoom_level(self):
+        """Update the icon and grid sizes based on current zoom level"""
+        icon_size = self.zoom_levels[self.current_zoom_index]
+        
+        # Re-render SVG icons at the new size
+        self.load_icons(icon_size)
+        
+        # Calculate grid size proportionally (add some padding)
+        grid_width = icon_size + 56  # Base padding of 56px
+        grid_height = icon_size + 36  # Base padding of 36px
+        
+        # Update the list widget
+        self.file_list_widget.setIconSize(QSize(icon_size, icon_size))
+        self.file_list_widget.setGridSize(QSize(grid_width, grid_height))
+        
+        # Update existing items with new icons
+        self.update_existing_item_icons()
+        
+        # Update button states
+        self.toolbar.zoom_in_btn.setEnabled(self.current_zoom_index < len(self.zoom_levels) - 1)
+        self.toolbar.zoom_out_btn.setEnabled(self.current_zoom_index > 0)
+    
+    def update_existing_item_icons(self):
+        """Update the icons of all existing items in the file list"""
+        for i in range(self.file_list_widget.count()):
+            item = self.file_list_widget.item(i)
+            if item:
+                data = item.data(Qt.UserRole)
+                if data:
+                    # Update icon based on type
+                    if data.get('is_dir', False):
+                        item.setIcon(self.folder_icon)
+                    else:
+                        item.setIcon(self.file_icon)
     
     def update_breadcrumb(self, path):
         """Update the breadcrumb navigation with the current path"""

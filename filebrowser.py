@@ -5,6 +5,7 @@ import os
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QMenuBar, QVBoxLayout, 
                              QHBoxLayout, QWidget, QSplitter, QAction)
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QIcon
 
 from sidebar import Sidebar
 from toolbar import Toolbar
@@ -16,6 +17,11 @@ class FileBrowser(QMainWindow):
         super().__init__()
         self.setWindowTitle("HPC Desktop File Browser")
         self.setGeometry(100, 100, 1200, 800)
+        
+        # Set application icon
+        icon_path = os.path.join(os.path.dirname(__file__), "resources", "filebrowser.svg")
+        if os.path.exists(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
         
         # Load filesystem configuration
         self.load_filesystem_config()
@@ -201,6 +207,11 @@ def main():
     # Set application properties
     app.setApplicationName("HPC Desktop File Browser")
     app.setApplicationVersion("1.0")
+    
+    # Set global application icon
+    icon_path = os.path.join(os.path.dirname(__file__), "resources", "filebrowser.svg")
+    if os.path.exists(icon_path):
+        app.setWindowIcon(QIcon(icon_path))
     
     window = FileBrowser()
     window.show()

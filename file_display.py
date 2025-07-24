@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QLabel, QFrame,
                              QTableWidget, QListWidget, QStackedWidget, 
                              QListWidgetItem, QGridLayout, QScrollArea, 
                              QHBoxLayout, QPushButton, QProgressBar, QToolBar, QAction, QAbstractScrollArea)
-from PyQt5.QtCore import Qt, pyqtSignal, QSize, QThread, QTimer, QPropertyAnimation, QEasingCurve
+from PyQt5.QtCore import Qt, pyqtSignal, QSize, QThread, QTimer, QPropertyAnimation, QEasingCurve, QRectF
 from PyQt5.QtGui import QFont, QIcon, QPixmap, QPainter, QTransform
 from PyQt5.QtSvg import QSvgRenderer
 
@@ -224,12 +224,16 @@ class FileDisplay(QWidget):
         self.current_filesystem_name = ""
         self.folder_icon = None
         self.file_icon = None
+        self.extension_icons = {}  # Dictionary to store extension-specific icons
+        self.extension_mapping = {}  # Dictionary to map extensions to icon files
         self.worker = None  # Current directory loading worker
         
         # Zoom levels for icon view
         self.zoom_levels = [32, 48, 64, 80, 96, 128]  # Icon sizes
         self.current_zoom_index = 2  # Start at 64px (index 2)
         
+        # Build extension mapping and load icons
+        self.build_extension_mapping()
         self.load_icons()
         self.setup_ui()
     
@@ -242,32 +246,137 @@ class FileDisplay(QWidget):
         """Destructor - ensure cleanup"""
         self._cleanup_worker()
     
+    def build_extension_mapping(self):
+        """Build mapping of file extensions to available icon files"""
+        try:
+            icon_dir = "resources/files"
+            if not os.path.exists(icon_dir):
+                print(f"Warning: Extension icons directory not found: {icon_dir}")
+                return
+            
+            # Scan directory for SVG files
+            for filename in os.listdir(icon_dir):
+                if filename.endswith('.svg') and filename != 'blank.svg':  # Skip blank.svg
+                    # Extract extension name (remove .svg)
+                    extension = filename[:-4].lower()
+                    icon_path = os.path.join(icon_dir, filename)
+                    
+                    # Map extension to icon path
+                    self.extension_mapping[extension] = icon_path
+                    
+                    # Also handle some common extension variations
+                    if extension == 'jpeg':
+                        self.extension_mapping['jpg'] = icon_path
+                    elif extension == 'mpeg':
+                        self.extension_mapping['mpg'] = icon_path
+                    elif extension == 'html':
+                        self.extension_mapping['htm'] = icon_path
+                    elif extension == 'javascript':
+                        self.extension_mapping['js'] = icon_path
+                    elif extension == 'typescript':
+                        self.extension_mapping['ts'] = icon_path
+            
+            print(f"Loaded {len(self.extension_mapping)} file extension icon mappings")
+            
+        except Exception as e:
+            print(f"Warning: Could not build extension mapping: {e}")
+    
     def load_icons(self, icon_size=64):
-        """Load SVG icons for files and folders at the specified size"""
+        """Load SVG icons for files, folders, and all extensions at the specified size"""
         try:
             # Load folder icon
             folder_renderer = QSvgRenderer("resources/folder.svg")
             folder_pixmap = QPixmap(icon_size, icon_size)
             folder_pixmap.fill(Qt.transparent)
             painter = QPainter(folder_pixmap)
-            folder_renderer.render(painter)
+            self._render_svg_centered(painter, folder_renderer, icon_size)
             painter.end()
             self.folder_icon = QIcon(folder_pixmap)
             
-            # Load file icon
+            # Load default file icon
             file_renderer = QSvgRenderer("resources/file.svg")
             file_pixmap = QPixmap(icon_size, icon_size)
             file_pixmap.fill(Qt.transparent)
             painter = QPainter(file_pixmap)
-            file_renderer.render(painter)
+            self._render_svg_centered(painter, file_renderer, icon_size)
             painter.end()
             self.file_icon = QIcon(file_pixmap)
+            
+            # Pre-load all extension-specific icons
+            self.extension_icons.clear()
+            for extension, icon_path in self.extension_mapping.items():
+                try:
+                    renderer = QSvgRenderer(icon_path)
+                    if renderer.isValid():
+                        pixmap = QPixmap(icon_size, icon_size)
+                        pixmap.fill(Qt.transparent)
+                        painter = QPainter(pixmap)
+                        self._render_svg_centered(painter, renderer, icon_size)
+                        painter.end()
+                        self.extension_icons[extension] = QIcon(pixmap)
+                except Exception as e:
+                    print(f"Warning: Could not load icon for extension '{extension}': {e}")
+            
+            print(f"Pre-loaded {len(self.extension_icons)} extension-specific icons at size {icon_size}px")
             
         except Exception as e:
             print(f"Warning: Could not load icons: {e}")
             # Fallback to default icons if SVG loading fails
             self.folder_icon = self.style().standardIcon(self.style().SP_DirIcon)
             self.file_icon = self.style().standardIcon(self.style().SP_FileIcon)
+    
+    def _render_svg_centered(self, painter, renderer, target_size):
+        """Render SVG content centered and properly scaled within a square target area"""
+        if not renderer.isValid():
+            return
+        
+        # Get the SVG's natural size
+        svg_size = renderer.defaultSize()
+        if svg_size.width() <= 0 or svg_size.height() <= 0:
+            # If SVG doesn't have valid dimensions, render to full target area
+            renderer.render(painter, QRectF(0, 0, target_size, target_size))
+            return
+        
+        # Calculate scaling to fit within target size while maintaining aspect ratio
+        svg_aspect = svg_size.width() / svg_size.height()
+        target_aspect = 1.0  # Square target
+        
+        if svg_aspect > target_aspect:
+            # SVG is wider than target - scale by width
+            scaled_width = target_size
+            scaled_height = target_size / svg_aspect
+        else:
+            # SVG is taller than target - scale by height
+            scaled_width = target_size * svg_aspect
+            scaled_height = target_size
+        
+        # Center the scaled SVG within the target area
+        x_offset = (target_size - scaled_width) / 2
+        y_offset = (target_size - scaled_height) / 2
+        
+        # Render the SVG to the calculated rectangle
+        target_rect = QRectF(x_offset, y_offset, scaled_width, scaled_height)
+        renderer.render(painter, target_rect)
+    
+    def get_icon_for_file(self, filename):
+        """Get the appropriate icon for a file based on its extension"""
+        if not filename:
+            return self.file_icon
+        
+        # Extract file extension
+        _, ext = os.path.splitext(filename)
+        if not ext:
+            return self.file_icon
+        
+        # Remove the dot and convert to lowercase
+        ext = ext[1:].lower()
+        
+        # Look up extension-specific icon
+        if ext in self.extension_icons:
+            return self.extension_icons[ext]
+        
+        # Fallback to default file icon
+        return self.file_icon
     
     def setup_ui(self):
         """Setup the file display UI"""
@@ -480,11 +589,12 @@ class FileDisplay(QWidget):
             'is_dir': is_dir
         })
         
-        # Set icon
+        # Set icon based on type and extension
         if is_dir:
             item.setIcon(self.folder_icon)
         else:
-            item.setIcon(self.file_icon)
+            # Use extension-specific icon if available
+            item.setIcon(self.get_icon_for_file(name))
         
         # Set tooltip with full name and path
         item.setToolTip(f"{name}\n{full_path}")
@@ -637,11 +747,12 @@ class FileDisplay(QWidget):
             if item:
                 data = item.data(Qt.UserRole)
                 if data:
-                    # Update icon based on type
+                    # Update icon based on type and extension
                     if data.get('is_dir', False):
                         item.setIcon(self.folder_icon)
                     else:
-                        item.setIcon(self.file_icon)
+                        # Use extension-specific icon if available
+                        item.setIcon(self.get_icon_for_file(data.get('name', '')))
     
     def update_breadcrumb(self, path):
         """Update the breadcrumb navigation with the current path"""

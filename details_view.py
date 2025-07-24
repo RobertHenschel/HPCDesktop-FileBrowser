@@ -186,26 +186,66 @@ class DetailsView(QWidget):
             group = grp.getgrgid(gid).gr_name
             group_members = grp.getgrgid(gid).gr_mem
 
-            
             # Live query the sidebar for the file system info
             file_system = None
             if self.sidebar:
                 file_system = self.sidebar.find_filesystem_for_path(path)
             fs_display = file_system['name'] if file_system and 'name' in file_system else 'Unknown'
+
+            # Permissions and human readable permissions
+            mode = stat_info.st_mode
+            permissions = stat.filemode(mode)
+            
+            # Build user permissions string
+            user_perms = []
+            if mode & stat.S_IRUSR:
+                user_perms.append("read")
+            if mode & stat.S_IWUSR:
+                user_perms.append("write") 
+            if mode & stat.S_IXUSR:
+                user_perms.append("execute")
+            if len(user_perms) > 0:
+                user_can = f"{'/'.join(user_perms)}"
+            else:
+                user_can = "None"
+            
+            # Build group permissions string
+            group_perms = []
+            if mode & stat.S_IRGRP:
+                group_perms.append("read")
+            if mode & stat.S_IWGRP:
+                group_perms.append("write") 
+            if mode & stat.S_IXGRP:
+                group_perms.append("execute")
+            if len(group_perms) > 0:
+                group_can = f"{'/'.join(group_perms)}"
+            else:
+                group_can = "None"
+
+            # Build other permissions string
+            other_perms = []
+            if mode & stat.S_IROTH:
+                other_perms.append("read")
+            if mode & stat.S_IWOTH:
+                other_perms.append("write") 
+            if mode & stat.S_IXOTH: 
+                other_perms.append("execute")
+            if len(other_perms) > 0:
+                other_can = f"{'/'.join(other_perms)}"
+            else:
+                other_can = "None"
             
             # General tab
             general_text = f"""<table border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"border:none\">
-<tr><td><b>File System:</b></td><td style=\"padding-left: 10px; padding-right: 10px\">{fs_display}</td><td style=\"padding-left: 10px\"><b>Owner:</b></td><td style=\"padding-left: 10px\">{uid} ({user})</td></tr>
-<tr><td><b>Directory:</b></td><td style=\"padding-left: 10px; padding-right: 10px\">{dir_name}</td><td style=\"padding-left: 10px\"><b>Owner Group:</b></td><td style=\"padding-left: 10px\">{gid} ({group})</td></tr>
-<tr><td><b>Path:</b></td><td style=\"padding-left: 10px; padding-right: 10px\">{path}</td><td style=\"padding-left: 10px\"><b>Group Members:</b></td><td style=\"padding-left: 10px\">{group_members}</td></tr>
-<tr><td><b>Contents:</b></td><td style=\"padding-left: 10px; padding-right: 10px\" colspan=\"3\">{total_items} items ({dirs_count} folders, {files_count} files) {file_sizes}</td></tr>
+<tr><td><b>File System:</b></td><td style=\"padding-left: 10px; padding-right: 10px\">{fs_display}</td><td style=\"padding-left: 10px\"><b>Owner:</b></td><td style=\"padding-left: 10px\">{user} ({uid})</td><td style=\"padding-left: 10px\"><b>Access Permissions:</b></td><td style=\"padding-left: 10px\">{permissions}</td></tr>
+<tr><td><b>Directory:</b></td><td style=\"padding-left: 10px; padding-right: 10px\">{dir_name}</td><td style=\"padding-left: 10px\"><b>Owner Group:</b></td><td style=\"padding-left: 10px\">{group} ({gid})</td><td style=\"padding-left: 10px\"><b>User/Owner:</b></td><td style=\"padding-left: 10px\">{user_can}</td></tr>
+<tr><td><b>Path:</b></td><td style=\"padding-left: 10px; padding-right: 10px\">{path}</td><td style=\"padding-left: 10px\"><b>Group Members:</b></td><td style=\"padding-left: 10px\">{group_members}</td><td style=\"padding-left: 10px\"><b>Group:</b></td><td style=\"padding-left: 10px\">{group_can}</td></tr>
+<tr><td><b>Contents:</b></td><td style=\"padding-left: 10px; padding-right: 10px\" colspan=\"3\">{total_items} items ({dirs_count} folders, {files_count} files) {file_sizes}</td><td style=\"padding-left: 10px\"><b>Others:</b></td><td style=\"padding-left: 10px\">{other_can}</td></tr>
 </table>"""
             self.general_label.setText(general_text)
             self.general_label.setStyleSheet("color: #333333; background-color: transparent;")
             
             # Properties tab
-            mode = stat_info.st_mode
-            permissions = stat.filemode(mode)
             created = datetime.datetime.fromtimestamp(stat_info.st_ctime).strftime("%Y-%m-%d %H:%M:%S")
             modified = datetime.datetime.fromtimestamp(stat_info.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
             accessed = datetime.datetime.fromtimestamp(stat_info.st_atime).strftime("%Y-%m-%d %H:%M:%S")

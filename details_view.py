@@ -34,8 +34,8 @@ class DetailsView(QWidget):
         
         # Create layout
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(5)
+        layout.setContentsMargins(2, 10, 2, 2)  # Minimal margins
+        layout.setSpacing(2)  # Minimal spacing
         
         # Create tabs for different information views
         self.general_tab = self.create_general_tab()
@@ -55,7 +55,7 @@ class DetailsView(QWidget):
         layout.addWidget(self.notebook)
         
         # Set minimum height
-        self.setMinimumHeight(150)
+        self.setMinimumHeight(60)
         
     def create_general_tab(self):
         """Create the general information tab"""

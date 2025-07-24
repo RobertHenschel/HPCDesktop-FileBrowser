@@ -25,12 +25,12 @@ class Sidebar(QWidget):
     def setup_ui(self):
         """Setup the sidebar UI"""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(5, 5, 5, 5)
+        layout.setContentsMargins(5, 0, 5, 0)
         layout.setSpacing(5)
         
         # Title area to match file display header height
         title_frame = QFrame()
-        title_frame.setMinimumHeight(35)  # Adjusted to match exactly
+        title_frame.setMinimumHeight(15)  # Adjusted to match exactly
         title_layout = QVBoxLayout(title_frame)
         title_layout.setContentsMargins(0, 0, 0, 0)
         title_layout.setSpacing(5)

@@ -82,18 +82,18 @@ class VerticalToolbar(QWidget):
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedWidth(40)
+        self.setFixedWidth(30)
         self.setup_ui()
         
     def setup_ui(self):
         """Setup the vertical toolbar UI"""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(5, 10, 5, 10)
+        layout.setContentsMargins(0, 10, 5, 10)
         layout.setSpacing(5)
         
         # Zoom In button (Plus)
         self.zoom_in_btn = QPushButton("+")
-        self.zoom_in_btn.setFixedSize(30, 30)
+        self.zoom_in_btn.setFixedSize(20, 20)
         self.zoom_in_btn.setStyleSheet("""
             QPushButton {
                 font-size: 16px;
@@ -116,7 +116,7 @@ class VerticalToolbar(QWidget):
         
         # Zoom Out button (Minus)
         self.zoom_out_btn = QPushButton("−")
-        self.zoom_out_btn.setFixedSize(30, 30)
+        self.zoom_out_btn.setFixedSize(20, 20)
         self.zoom_out_btn.setStyleSheet("""
             QPushButton {
                 font-size: 16px;
@@ -272,18 +272,18 @@ class FileDisplay(QWidget):
     def setup_ui(self):
         """Setup the file display UI"""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(5, 5, 5, 5)
+        layout.setContentsMargins(5, 0, 5, 5)
         layout.setSpacing(5)
         
         # Breadcrumb navigation - match sidebar title area height
         self.breadcrumb_frame = QFrame()
-        self.breadcrumb_frame.setMinimumHeight(35)  # Match sidebar title + separator height
+        self.breadcrumb_frame.setMinimumHeight(15)  # Match sidebar title + separator height
         self.breadcrumb_layout = QHBoxLayout(self.breadcrumb_frame)
-        self.breadcrumb_layout.setContentsMargins(5, 5, 5, 5)
+        self.breadcrumb_layout.setContentsMargins(5, 0, 5, 0)
         self.breadcrumb_layout.setSpacing(0)
         
         # Title label (similar to sidebar)
-        self.breadcrumb_title = QLabel("Path")
+        self.breadcrumb_title = QLabel("Path :   ")
         title_font = QFont()
         title_font.setBold(True)
         title_font.setPointSize(12)
@@ -291,11 +291,7 @@ class FileDisplay(QWidget):
         self.breadcrumb_title.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self.breadcrumb_layout.addWidget(self.breadcrumb_title)
         
-        # Separator between title and breadcrumb
-        separator_label = QLabel(":")
-        separator_label.setStyleSheet("margin: 0 5px;")
-        self.breadcrumb_layout.addWidget(separator_label)
-        
+       
         # Container for breadcrumb buttons
         self.breadcrumb_container = QWidget()
         self.breadcrumb_container_layout = QHBoxLayout(self.breadcrumb_container)
@@ -672,7 +668,7 @@ class FileDisplay(QWidget):
             # Add separator before each segment (except the first)
             if i > 0:
                 separator = QLabel("/")
-                separator.setStyleSheet("color: #666666; margin: 0 2px;")
+                separator.setStyleSheet("color: #666666; margin: 0 1px;")
                 self.breadcrumb_container_layout.addWidget(separator)
             
             # Create the clickable button
@@ -681,7 +677,7 @@ class FileDisplay(QWidget):
             button.setStyleSheet("""
                 QPushButton {
                     border: none;
-                    padding: 2px 4px;
+                    padding: 0px 0px;
                     text-align: left;
                     color: #0066cc;
                     background: transparent;

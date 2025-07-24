@@ -103,11 +103,13 @@ class FileBrowser(QMainWindow):
         self.setCentralWidget(central_widget)
         
         layout = QVBoxLayout(central_widget)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+        layout.setContentsMargins(0, 0, 0, 0)  # Remove all margins
+        layout.setSpacing(0)  # Remove spacing
         
         # Create vertical splitter for details view at top and main content below
         main_splitter = QSplitter(Qt.Vertical)
+        main_splitter.setHandleWidth(2)  # Thinner splitter handle
+        main_splitter.setContentsMargins(0, 0, 0, 0)  # Remove splitter margins
         
         # Create details view component
         self.details_view = DetailsView()
@@ -115,6 +117,8 @@ class FileBrowser(QMainWindow):
         
         # Create horizontal splitter for sidebar and file display
         content_splitter = QSplitter(Qt.Horizontal)
+        content_splitter.setHandleWidth(2)
+        content_splitter.setContentsMargins(0, 0, 0, 0)
         
         # Create sidebar
         self.sidebar = Sidebar(self.filesystem_config)
@@ -137,12 +141,12 @@ class FileBrowser(QMainWindow):
         self.file_display.file_selected.connect(self.on_file_selected)
         
         # Set initial content splitter sizes (sidebar: 300px, file display: rest)
-        content_splitter.setSizes([300, 900])
+        content_splitter.setSizes([250, 900])
         content_splitter.setStretchFactor(0, 0)  # Sidebar doesn't stretch
         content_splitter.setStretchFactor(1, 1)  # File display stretches
         
-        # Set initial main splitter sizes (details view: 200px, content: rest)
-        main_splitter.setSizes([200, 600])
+        # Set initial main splitter sizes (details view: 150px, content: rest)
+        main_splitter.setSizes([150, 650])
         main_splitter.setStretchFactor(0, 0)  # Details view can be resized but doesn't auto-stretch
         main_splitter.setStretchFactor(1, 1)  # Content area stretches
         

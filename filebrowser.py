@@ -4,7 +4,7 @@ import json
 import os
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QMenuBar, QVBoxLayout, 
                              QHBoxLayout, QWidget, QSplitter, QAction)
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QSettings
 from PyQt5.QtGui import QIcon
 
 from sidebar import Sidebar
@@ -16,7 +16,16 @@ class FileBrowser(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("HPC Desktop File Browser")
-        self.setGeometry(100, 100, 1200, 800)
+        
+        # Initialize settings
+        self.settings = QSettings("HPCDesktop", "FileBrowser")
+        
+        # Load saved window geometry or use defaults
+        geometry = self.settings.value("window/geometry")
+        if geometry:
+            self.restoreGeometry(geometry)
+        else:
+            self.setGeometry(100, 100, 1200, 800)
         
         # Set application icon
         icon_path = os.path.join(os.path.dirname(__file__), "resources", "filebrowser.svg")
@@ -125,6 +134,9 @@ class FileBrowser(QMainWindow):
         splitter.setStretchFactor(1, 1)  # File display stretches
         
         layout.addWidget(splitter)
+        
+        # Restore saved settings
+        self.restore_settings()
     
     def on_filesystem_selected(self, name, path):
         """Handle filesystem selection from sidebar"""
@@ -172,9 +184,34 @@ class FileBrowser(QMainWindow):
     
     def closeEvent(self, event):
         """Handle application close event"""
+        # Save window geometry
+        self.settings.setValue("window/geometry", self.saveGeometry())
+        
+        # Save current path and zoom level
+        current_path = self.file_display.get_current_path()
+        if current_path:
+            self.settings.setValue("file_display/current_path", current_path)
+        
+        zoom_level = self.file_display.get_zoom_level()
+        self.settings.setValue("file_display/zoom_level", zoom_level)
+        
         # Save custom paths before closing
         self.sidebar.save_on_close()
+        
         event.accept()
+    
+    def restore_settings(self):
+        """Restore saved settings on application start"""
+        # Restore current path and zoom level
+        current_path = self.settings.value("file_display/current_path", "")
+        zoom_level = self.settings.value("file_display/zoom_level", 2)  # Default to 64px
+        
+        # Convert zoom_level to int if it's a string
+        if isinstance(zoom_level, str):
+            zoom_level = int(zoom_level)
+        
+        # Restore file display settings
+        self.file_display.restore_settings(current_path, zoom_level)
     
     def on_add_current_path_requested(self):
         """Handle request to add current path to custom paths"""

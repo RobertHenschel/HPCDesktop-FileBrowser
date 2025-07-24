@@ -536,6 +536,28 @@ class FileDisplay(QWidget):
         """Get the current path being displayed"""
         return self.current_path
     
+    def get_zoom_level(self):
+        """Get the current zoom level index"""
+        return self.current_zoom_index
+    
+    def set_zoom_level(self, zoom_index):
+        """Set the zoom level by index"""
+        if 0 <= zoom_index < len(self.zoom_levels):
+            self.current_zoom_index = zoom_index
+            self.update_zoom_level()
+    
+    def restore_settings(self, current_path=None, zoom_level=None):
+        """Restore settings from saved state"""
+        # Restore zoom level
+        if zoom_level is not None:
+            self.set_zoom_level(zoom_level)
+        
+        # Restore current path if provided and valid
+        if current_path and os.path.exists(current_path) and os.path.isdir(current_path):
+            self.current_path = current_path
+            self.update_breadcrumb(current_path)
+            self.load_directory_contents(current_path)
+    
     def zoom_in(self):
         """Increase the icon size (zoom in)"""
         if self.current_zoom_index < len(self.zoom_levels) - 1:

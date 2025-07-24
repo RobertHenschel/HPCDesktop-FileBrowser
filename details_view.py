@@ -18,9 +18,9 @@ class DetailsView(QWidget):
     
     def setup_ui(self):
         """Setup the details view UI with notebook tabs"""
-        # Set pastel blue background
+        # Set pastel blue background for the outer container only
         self.setStyleSheet("""
-            QWidget {
+            DetailsView {
                 background-color: #B8D8FF;
                 border: 2px solid #7BB3FF;
             }
@@ -64,7 +64,7 @@ class DetailsView(QWidget):
         layout.setContentsMargins(10, 10, 10, 10)
         
         self.general_label = QLabel("No item selected")
-        self.general_label.setStyleSheet("color: #666666; font-style: italic;")
+        self.general_label.setStyleSheet("color: #333333; font-style: italic; background-color: transparent;")
         self.general_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
         self.general_label.setWordWrap(True)
         layout.addWidget(self.general_label)
@@ -79,7 +79,7 @@ class DetailsView(QWidget):
         layout.setContentsMargins(10, 10, 10, 10)
         
         self.properties_label = QLabel("No item selected")
-        self.properties_label.setStyleSheet("color: #666666; font-style: italic;")
+        self.properties_label.setStyleSheet("color: #333333; font-style: italic; background-color: transparent;")
         self.properties_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
         self.properties_label.setWordWrap(True)
         layout.addWidget(self.properties_label)
@@ -94,7 +94,7 @@ class DetailsView(QWidget):
         layout.setContentsMargins(10, 10, 10, 10)
         
         self.details_label = QLabel("No item selected")
-        self.details_label.setStyleSheet("color: #666666; font-style: italic;")
+        self.details_label.setStyleSheet("color: #333333; font-style: italic; background-color: transparent;")
         self.details_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
         self.details_label.setWordWrap(True)
         layout.addWidget(self.details_label)
@@ -117,7 +117,7 @@ class DetailsView(QWidget):
         self.metadata_layout.setContentsMargins(5, 5, 5, 5)
         
         self.metadata_label = QLabel("No item selected")
-        self.metadata_label.setStyleSheet("color: #666666; font-style: italic;")
+        self.metadata_label.setStyleSheet("color: #333333; font-style: italic; background-color: transparent;")
         self.metadata_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
         self.metadata_label.setWordWrap(True)
         self.metadata_layout.addWidget(self.metadata_label)
@@ -167,7 +167,7 @@ class DetailsView(QWidget):
 <br><b>Path:</b> {path}
 <br><b>Contents:</b> {total_items} items ({dirs_count} folders, {files_count} files)"""
             self.general_label.setText(general_text)
-            self.general_label.setStyleSheet("color: #333333;")
+            self.general_label.setStyleSheet("color: #333333; background-color: transparent;")
             
             # Properties tab
             mode = stat_info.st_mode
@@ -183,7 +183,7 @@ class DetailsView(QWidget):
 <br><b>Modified:</b> {modified}
 <br><b>Accessed:</b> {accessed}"""
             self.properties_label.setText(properties_text)
-            self.properties_label.setStyleSheet("color: #333333;")
+            self.properties_label.setStyleSheet("color: #333333; background-color: transparent;")
             
             # Details tab
             details_text = f"""<b>Full Path:</b> {os.path.abspath(path)}
@@ -192,7 +192,7 @@ class DetailsView(QWidget):
 <br><b>Inode:</b> {stat_info.st_ino}
 <br><b>Device:</b> {stat_info.st_dev}"""
             self.details_label.setText(details_text)
-            self.details_label.setStyleSheet("color: #333333;")
+            self.details_label.setStyleSheet("color: #333333; background-color: transparent;")
             
             # Metadata tab
             metadata_text = f"""<b>System Information:</b>
@@ -202,7 +202,7 @@ class DetailsView(QWidget):
 <br>• Block size: {getattr(stat_info, 'st_blksize', 'N/A')}
 <br>• Blocks: {getattr(stat_info, 'st_blocks', 'N/A')}"""
             self.metadata_label.setText(metadata_text)
-            self.metadata_label.setStyleSheet("color: #333333;")
+            self.metadata_label.setStyleSheet("color: #333333; background-color: transparent;")
             
         except Exception as e:
             error_text = f"<b>Error reading directory:</b> {str(e)}"
@@ -238,7 +238,7 @@ class DetailsView(QWidget):
 <br><b>Size:</b> {size_str}
 <br><b>Type:</b> {file_type} file"""
             self.general_label.setText(general_text)
-            self.general_label.setStyleSheet("color: #333333;")
+            self.general_label.setStyleSheet("color: #333333; background-color: transparent;")
             
             # Properties tab
             mode = stat_info.st_mode
@@ -255,7 +255,7 @@ class DetailsView(QWidget):
 <br><b>Modified:</b> {modified}
 <br><b>Accessed:</b> {accessed}"""
             self.properties_label.setText(properties_text)
-            self.properties_label.setStyleSheet("color: #333333;")
+            self.properties_label.setStyleSheet("color: #333333; background-color: transparent;")
             
             # Details tab
             details_text = f"""<b>Full Path:</b> {os.path.abspath(path)}
@@ -266,7 +266,7 @@ class DetailsView(QWidget):
 <br><b>Inode:</b> {stat_info.st_ino}
 <br><b>Device:</b> {stat_info.st_dev}"""
             self.details_label.setText(details_text)
-            self.details_label.setStyleSheet("color: #333333;")
+            self.details_label.setStyleSheet("color: #333333; background-color: transparent;")
             
             # Metadata tab
             metadata_text = f"""<b>System Information:</b>
@@ -293,7 +293,7 @@ class DetailsView(QWidget):
                 pass
                 
             self.metadata_label.setText(metadata_text)
-            self.metadata_label.setStyleSheet("color: #333333;")
+            self.metadata_label.setStyleSheet("color: #333333; background-color: transparent;")
             
         except Exception as e:
             error_text = f"<b>Error reading file:</b> {str(e)}"
@@ -305,7 +305,7 @@ class DetailsView(QWidget):
     def clear_info(self):
         """Clear all tab information"""
         clear_text = "No item selected"
-        style = "color: #666666; font-style: italic;"
+        style = "color: #666666; font-style: italic; background-color: transparent;"
         
         self.general_label.setText(clear_text)
         self.general_label.setStyleSheet(style)

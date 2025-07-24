@@ -110,6 +110,59 @@ class NotebookWidget(QTabWidget):
             # Default empty tabs
             for name in ["General", "Documents", "Demos", "Inbox"]:
                 self.addTab(QWidget(), name)
+        
+        # Apply background colors to tab contents
+        self.apply_tab_colors()
+    
+    def apply_tab_colors(self):
+        """Apply matching background colors to tab content widgets"""
+        for i in range(self.count()):
+            widget = self.widget(i)
+            if widget:
+                color = self.tab_colors[i] if i < len(self.tab_colors) else (240, 240, 240)
+                # Create a slightly lighter version of the tab color for the content
+                lighter_color = (
+                    min(255, color[0] + 20),
+                    min(255, color[1] + 20),
+                    min(255, color[2] + 20)
+                )
+                widget.setStyleSheet(f"""
+                    QWidget {{
+                        background-color: rgb({lighter_color[0]}, {lighter_color[1]}, {lighter_color[2]});
+                    }}
+                    QLabel {{
+                        background-color: transparent;
+                    }}
+                    QScrollArea {{
+                        background-color: transparent;
+                        border: none;
+                    }}
+                """)
+    
+    def addTab(self, widget, label):
+        """Override addTab to apply colors to new tabs"""
+        index = super().addTab(widget, label)
+        if widget:
+            color = self.tab_colors[index] if index < len(self.tab_colors) else (240, 240, 240)
+            # Create a slightly lighter version of the tab color for the content
+            lighter_color = (
+                min(255, color[0] + 20),
+                min(255, color[1] + 20),
+                min(255, color[2] + 20)
+            )
+            widget.setStyleSheet(f"""
+                QWidget {{
+                    background-color: rgb({lighter_color[0]}, {lighter_color[1]}, {lighter_color[2]});
+                }}
+                QLabel {{
+                    background-color: transparent;
+                }}
+                QScrollArea {{
+                    background-color: transparent;
+                    border: none;
+                }}
+            """)
+        return index
     
     def paintEvent(self, event):
         """Override paint event to draw the selected tab indicator line across content width."""

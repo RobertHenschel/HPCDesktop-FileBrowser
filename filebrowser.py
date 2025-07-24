@@ -8,8 +8,8 @@ from PyQt5.QtCore import Qt, QSettings
 from PyQt5.QtGui import QIcon
 
 from sidebar import Sidebar
-from toolbar import Toolbar
 from file_display import FileDisplay
+from details_view import DetailsView
 
 
 class FileBrowser(QMainWindow):
@@ -98,7 +98,7 @@ class FileBrowser(QMainWindow):
         help_menu.addAction(about_action)
     
     def setup_main_layout(self):
-        """Setup the main layout with toolbar and splitter"""
+        """Setup the main layout with details view and main content splitter"""
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
@@ -106,34 +106,47 @@ class FileBrowser(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         
-        # Add toolbar
-        self.toolbar = Toolbar()
-        layout.addWidget(self.toolbar)
+        # Create vertical splitter for details view at top and main content below
+        main_splitter = QSplitter(Qt.Vertical)
         
-        # Create splitter for sidebar and file display
-        splitter = QSplitter(Qt.Horizontal)
+        # Create details view component
+        self.details_view = DetailsView()
+        main_splitter.addWidget(self.details_view)
+        
+        # Create horizontal splitter for sidebar and file display
+        content_splitter = QSplitter(Qt.Horizontal)
         
         # Create sidebar
         self.sidebar = Sidebar(self.filesystem_config)
-        splitter.addWidget(self.sidebar)
+        content_splitter.addWidget(self.sidebar)
         
         # Create file display area
         self.file_display = FileDisplay()
-        splitter.addWidget(self.file_display)
+        content_splitter.addWidget(self.file_display)
+        
+        # Add content splitter to main splitter
+        main_splitter.addWidget(content_splitter)
         
         # Connect signals
         self.sidebar.filesystem_selected.connect(self.on_filesystem_selected)
         self.sidebar.add_current_path_requested.connect(self.on_add_current_path_requested)
         self.file_display.directory_changed.connect(self.on_directory_changed)
-        self.toolbar.navigate_up.connect(self.on_navigate_up)
-        self.toolbar.refresh_requested.connect(self.on_refresh_requested)
         
-        # Set initial splitter sizes (sidebar: 300px, file display: rest)
-        splitter.setSizes([300, 900])
-        splitter.setStretchFactor(0, 0)  # Sidebar doesn't stretch
-        splitter.setStretchFactor(1, 1)  # File display stretches
+        # Connect details view signals
+        self.file_display.directory_changed.connect(self.details_view.set_current_directory)
+        self.file_display.file_selected.connect(self.on_file_selected)
         
-        layout.addWidget(splitter)
+        # Set initial content splitter sizes (sidebar: 300px, file display: rest)
+        content_splitter.setSizes([300, 900])
+        content_splitter.setStretchFactor(0, 0)  # Sidebar doesn't stretch
+        content_splitter.setStretchFactor(1, 1)  # File display stretches
+        
+        # Set initial main splitter sizes (details view: 200px, content: rest)
+        main_splitter.setSizes([200, 600])
+        main_splitter.setStretchFactor(0, 0)  # Details view can be resized but doesn't auto-stretch
+        main_splitter.setStretchFactor(1, 1)  # Content area stretches
+        
+        layout.addWidget(main_splitter)
         
         # Restore saved settings
         self.restore_settings()
@@ -145,10 +158,7 @@ class FileBrowser(QMainWindow):
         # Expand user path for checking (path already has $USER expanded from config)
         expanded_path = os.path.expanduser(path)
         
-        # Enable/disable navigation buttons
-        parent_dir = os.path.dirname(expanded_path)
-        can_go_up = parent_dir != expanded_path and os.path.exists(parent_dir)
-        self.toolbar.enable_navigation(up=can_go_up)
+        # Note: Navigation is now handled via breadcrumb clicks
         
         # Update sidebar with current path for the Add Current Path button
         self.sidebar.set_current_path(expanded_path)
@@ -160,27 +170,18 @@ class FileBrowser(QMainWindow):
         """Handle directory navigation within file display"""
         print(f"Directory changed to: {new_path}")
         
-        # Enable/disable navigation buttons
-        parent_dir = os.path.dirname(new_path)
-        can_go_up = parent_dir != new_path and os.path.exists(parent_dir)
-        self.toolbar.enable_navigation(up=can_go_up)
+        # Note: Navigation is now handled via breadcrumb clicks
         
         # Update sidebar with current path for the Add Current Path button
         self.sidebar.set_current_path(new_path)
     
-    def on_navigate_up(self):
-        """Handle navigate up button click"""
-        current_path = self.file_display.get_current_path()
-        if current_path:
-            parent_path = os.path.dirname(current_path)
-            if parent_path != current_path and os.path.exists(parent_path):
-                self.file_display.current_path = parent_path
-                self.file_display.update_breadcrumb(parent_path)
-                self.file_display.load_directory_contents(parent_path)
-    
-    def on_refresh_requested(self):
-        """Handle refresh button click"""
-        self.file_display.refresh()
+    def on_file_selected(self, file_path):
+        """Handle file selection from file display"""
+        print(f"File selected: {file_path}")
+        
+        # Update details view with selected file
+        is_directory = os.path.isdir(file_path)
+        self.details_view.set_selected_item(file_path, is_directory)
     
     def closeEvent(self, event):
         """Handle application close event"""

@@ -3,7 +3,7 @@ import time
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QLabel, QFrame, 
                              QTableWidget, QListWidget, QStackedWidget, 
                              QListWidgetItem, QGridLayout, QScrollArea, 
-                             QHBoxLayout, QPushButton, QProgressBar, QToolBar, QAction)
+                             QHBoxLayout, QPushButton, QProgressBar, QToolBar, QAction, QAbstractScrollArea)
 from PyQt5.QtCore import Qt, pyqtSignal, QSize, QThread, QTimer, QPropertyAnimation, QEasingCurve
 from PyQt5.QtGui import QFont, QIcon, QPixmap, QPainter, QTransform
 from PyQt5.QtSvg import QSvgRenderer
@@ -193,6 +193,26 @@ class SpinningBusyIndicator(QLabel):
         self.setText(f"{self.dots[self.current_frame]} Loading...")
 
 
+class ClickableListWidget(QListWidget):
+    """Custom QListWidget that handles clicks in empty areas"""
+    
+    # Signal for empty area clicks
+    empty_area_clicked = pyqtSignal()
+    
+    def mousePressEvent(self, event):
+        """Override mouse press to detect empty area clicks"""
+        # Check if click is on an item
+        item = self.itemAt(event.pos())
+        
+        if item is None:
+            # Click was in empty area
+            self.clearSelection()  # Clear any selection
+            self.empty_area_clicked.emit()  # Emit signal
+        
+        # Call parent implementation for normal behavior
+        super().mousePressEvent(event)
+
+
 class FileDisplay(QWidget):
     # Signals for future functionality
     file_selected = pyqtSignal(str)  # file path
@@ -333,7 +353,7 @@ class FileDisplay(QWidget):
         self.content_widget.addWidget(welcome_widget)
         
         # File listing widget (grid view)
-        self.file_list_widget = QListWidget()
+        self.file_list_widget = ClickableListWidget()
         self.file_list_widget.setViewMode(QListWidget.IconMode)
         self.file_list_widget.setResizeMode(QListWidget.Adjust)
         # Set initial grid and icon size based on zoom level
@@ -345,7 +365,9 @@ class FileDisplay(QWidget):
         self.file_list_widget.setUniformItemSizes(True)
         self.file_list_widget.setWordWrap(True)
         self.file_list_widget.setSpacing(10)
+        self.file_list_widget.itemClicked.connect(self.on_item_clicked)
         self.file_list_widget.itemDoubleClicked.connect(self.on_item_double_clicked)
+        self.file_list_widget.empty_area_clicked.connect(self.on_empty_area_clicked)
         self.content_widget.addWidget(self.file_list_widget)
         
         # Table view widget (for future detailed view)
@@ -433,6 +455,10 @@ class FileDisplay(QWidget):
         # Add entries to the list
         for entry_name, is_dir, entry_path in entries:
             self.add_file_item(entry_name, is_dir, entry_path)
+        
+        # Emit directory changed signal to update details view with current directory
+        if self.current_path:
+            self.directory_changed.emit(self.current_path)
     
     def on_loading_error(self, error_message):
         """Handle directory loading error"""
@@ -496,6 +522,16 @@ class FileDisplay(QWidget):
         
         self.file_list_widget.addItem(error_item)
     
+    def on_item_clicked(self, item):
+        """Handle single-click on file/folder items for selection"""
+        data = item.data(Qt.UserRole)
+        if not data:
+            return
+        
+        # Emit selection signal for both files and folders
+        file_path = data['path']
+        self.file_selected.emit(file_path)
+    
     def on_item_double_clicked(self, item):
         """Handle double-click on file/folder items"""
         data = item.data(Qt.UserRole)
@@ -515,10 +551,16 @@ class FileDisplay(QWidget):
             # Emit signal for other components
             self.directory_changed.emit(new_path)
         else:
-            # File selected
+            # File double-clicked - could open file or show more details
             file_path = data['path']
-            self.file_selected.emit(file_path)
-            print(f"File selected: {file_path}")
+            print(f"File double-clicked: {file_path}")
+    
+    def on_empty_area_clicked(self):
+        """Handle clicks in empty areas of the file list widget"""
+        # Clear any selection and show current directory in details view
+        if self.current_path:
+            # Emit directory changed signal to update details view with current directory
+            self.directory_changed.emit(self.current_path)
     
     def clear_display(self):
         """Clear the file display and return to welcome screen"""

@@ -122,6 +122,7 @@ class FileBrowser(QMainWindow):
         
         # Create sidebar
         self.sidebar = Sidebar(self.filesystem_config)
+        self.details_view.set_sidebar(self.sidebar)
         content_splitter.addWidget(self.sidebar)
         
         # Create file display area

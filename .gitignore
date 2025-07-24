@@ -5,4 +5,10 @@ __pycache__/toolbar.cpython-313.pyc
 __pycache__/details_view.cpython-313.pyc
 __pycache__/notebook.cpython-313.pyc
 nsNotebook/__pycache__/__init__.cpython-313.pyc
-
+__pycache__/sidebar.cpython-312.pyc
+.gitignore
+nsNotebook/__pycache__/notebook.cpython-312.pyc
+nsNotebook/__pycache__/__init__.cpython-312.pyc
+__pycache__/file_display.cpython-312.pyc
+__pycache__/details_view.cpython-312.pyc
+nsNotebook/__pycache__/notebook.cpython-313.pyc

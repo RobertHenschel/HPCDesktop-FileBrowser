@@ -1,4 +1,6 @@
 import os
+import pwd
+import grp
 import stat
 import datetime
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QTextEdit, QScrollArea
@@ -14,7 +16,12 @@ class DetailsView(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.current_path = ""
+        self.sidebar = None  # Reference to Sidebar for live queries
         self.setup_ui()
+
+    def set_sidebar(self, sidebar):
+        """Set the Sidebar instance for live queries."""
+        self.sidebar = sidebar
     
     def setup_ui(self):
         """Setup the details view UI with notebook tabs"""
@@ -159,13 +166,40 @@ class DetailsView(QWidget):
                 total_items = len(items)
                 files_count = sum(1 for item in items if os.path.isfile(os.path.join(path, item)))
                 dirs_count = total_items - files_count
+                file_sizes = sum(os.path.getsize(os.path.join(path, item)) for item in items if os.path.isfile(os.path.join(path, item)))
+                # convert file_sizes to a human readable format
+                if file_sizes < 1024:
+                    file_sizes = f"{file_sizes} bytes"
+                elif file_sizes < 1024 * 1024:
+                    file_sizes = f"{file_sizes / 1024:.1f} KB"
+                elif file_sizes < 1024 * 1024 * 1024:
+                    file_sizes = f"{file_sizes / (1024 * 1024):.1f} MB"
+                else:
+                    file_sizes = f"{file_sizes / (1024 * 1024 * 1024):.1f} GB"
             except PermissionError:
                 total_items = files_count = dirs_count = "Permission denied"
+            # get the GID and UID of the directory
+            gid = stat_info.st_gid
+            uid = stat_info.st_uid
+            # get the name of the user and group from the GID and UID            
+            user = pwd.getpwuid(uid).pw_name
+            group = grp.getgrgid(gid).gr_name
+            group_members = grp.getgrgid(gid).gr_mem
+
+            
+            # Live query the sidebar for the file system info
+            file_system = None
+            if self.sidebar:
+                file_system = self.sidebar.find_filesystem_for_path(path)
+            fs_display = file_system['name'] if file_system and 'name' in file_system else 'Unknown'
             
             # General tab
-            general_text = f"""<b>Directory:</b> {dir_name}
-<br><b>Path:</b> {path}
-<br><b>Contents:</b> {total_items} items ({dirs_count} folders, {files_count} files)"""
+            general_text = f"""<table border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"border:none\">
+<tr><td><b>File System:</b></td><td style=\"padding-left: 10px; padding-right: 10px\">{fs_display}</td><td style=\"padding-left: 10px\"><b>Owner:</b></td><td style=\"padding-left: 10px\">{uid} ({user})</td></tr>
+<tr><td><b>Directory:</b></td><td style=\"padding-left: 10px; padding-right: 10px\">{dir_name}</td><td style=\"padding-left: 10px\"><b>Owner Group:</b></td><td style=\"padding-left: 10px\">{gid} ({group})</td></tr>
+<tr><td><b>Path:</b></td><td style=\"padding-left: 10px; padding-right: 10px\">{path}</td><td style=\"padding-left: 10px\"><b>Group Members:</b></td><td style=\"padding-left: 10px\">{group_members}</td></tr>
+<tr><td><b>Contents:</b></td><td style=\"padding-left: 10px; padding-right: 10px\" colspan=\"3\">{total_items} items ({dirs_count} folders, {files_count} files) {file_sizes}</td></tr>
+</table>"""
             self.general_label.setText(general_text)
             self.general_label.setStyleSheet("color: #333333; background-color: transparent;")
             

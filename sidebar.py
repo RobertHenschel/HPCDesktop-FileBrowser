@@ -412,3 +412,27 @@ class Sidebar(QWidget):
         
         # Just sync the custom_paths list to match what's displayed in the tree
         self.sync_custom_paths_from_tree() 
+
+    def find_filesystem_for_path(self, path):
+        """Return the file system dict whose path is a prefix of the given path, or None if not found."""
+        # Flatten all file system entries (including custom paths)
+        def collect_filesystems(filesystems, out):
+            for item in filesystems:
+                if 'category' in item:
+                    collect_filesystems(item.get('filesystems', []), out)
+                else:
+                    out.append(item)
+        all_filesystems = []
+        collect_filesystems(self.filesystem_config.get('toplevel', []), all_filesystems)
+        # Add custom paths
+        for cp in self.custom_paths:
+            all_filesystems.append({'name': cp['name'], 'path': cp['path'], 'is_custom': True})
+        # Find the best match (longest prefix)
+        best_match = None
+        best_len = -1
+        for fs in all_filesystems:
+            fs_path = os.path.expanduser(fs.get('path', ''))
+            if path.startswith(fs_path) and len(fs_path) > best_len:
+                best_match = fs
+                best_len = len(fs_path)
+        return best_match 

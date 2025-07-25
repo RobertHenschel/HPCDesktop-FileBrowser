@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QLabel, QFrame,
                              QTableWidget, QListWidget, QStackedWidget, 
                              QListWidgetItem, QGridLayout, QScrollArea, 
                              QHBoxLayout, QPushButton, QProgressBar, QToolBar, QAction, QAbstractScrollArea)
-from PyQt5.QtCore import Qt, pyqtSignal, QSize, QThread, QTimer, QPropertyAnimation, QEasingCurve, QRectF
+from PyQt5.QtCore import Qt, pyqtSignal, QSize, QThread, QPropertyAnimation, QEasingCurve, QRectF
 from PyQt5.QtGui import QFont, QIcon, QPixmap, QPainter, QTransform
 from PyQt5.QtSvg import QSvgRenderer
 
@@ -149,50 +149,6 @@ class VerticalToolbar(QWidget):
                 border-right: 1px solid #cccccc;
             }
         """)
-
-
-class SpinningBusyIndicator(QLabel):
-    """A spinning busy indicator widget using animated dots"""
-    
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setFixedSize(60, 20)
-        self.setAlignment(Qt.AlignCenter)
-        
-        # Use animated dots instead of rotating character
-        self.dots = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-        self.current_frame = 0
-        
-        self.setStyleSheet("""
-            QLabel {
-                color: #666666;
-                font-size: 12px;
-                font-weight: normal;
-                background: transparent;
-            }
-        """)
-        
-        # Setup animation timer
-        self.animation_timer = QTimer()
-        self.animation_timer.timeout.connect(self.update_animation)
-        self.hide()  # Start hidden
-    
-    def start_spinning(self):
-        """Start the spinning animation"""
-        self.setText("⠋ Loading...")
-        self.show()
-        self.animation_timer.start(100)  # Update every 100ms
-    
-    def stop_spinning(self):
-        """Stop the spinning animation"""
-        self.animation_timer.stop()
-        self.hide()
-        self.current_frame = 0
-    
-    def update_animation(self):
-        """Update the animation frame"""
-        self.current_frame = (self.current_frame + 1) % len(self.dots)
-        self.setText(f"{self.dots[self.current_frame]} Loading...")
 
 
 class ClickableListWidget(QListWidget):
@@ -413,10 +369,6 @@ class FileDisplay(QWidget):
         # Add stretch to push breadcrumb to the left
         self.breadcrumb_layout.addStretch()
         
-        # Busy indicator (right-aligned)
-        self.busy_indicator = SpinningBusyIndicator()
-        self.breadcrumb_layout.addWidget(self.busy_indicator)
-        
         # Default message
         self.default_breadcrumb = QLabel("Select a filesystem from the sidebar")
         self.default_breadcrumb.setStyleSheet("color: #666666; font-style: italic;")
@@ -522,9 +474,6 @@ class FileDisplay(QWidget):
         # Clear existing content
         self.file_list_widget.clear()
         
-        # Show busy indicator
-        self.busy_indicator.start_spinning()
-        
         # Start worker thread
         self.worker = DirectoryWorker(path)
         self.worker.contents_loaded.connect(self.on_contents_loaded)
@@ -573,7 +522,6 @@ class FileDisplay(QWidget):
     
     def on_loading_finished(self):
         """Handle completion of directory loading (success or error)"""
-        self.busy_indicator.stop_spinning()
         # Don't cleanup worker here - let it be handled by _cleanup_worker() 
         # when the next operation starts, or when the widget is destroyed
     

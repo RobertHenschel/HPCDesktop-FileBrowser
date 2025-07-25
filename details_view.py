@@ -235,11 +235,20 @@ class DetailsView(QWidget):
             else:
                 other_can = "None"
             
+            # truncate path as needed, make it no longer than 50, put "..." in the middle if needed
+            if len(path) > 40:
+                path_display = path[:20] + "..." + path[-20:]
+            else:
+                path_display = path
+            
+            if len(group_members) > 40:
+                group_members = group_members[:20] + "..." + group_members[-20:]
+            
             # General tab
             general_text = f"""<table border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"border:none\">
 <tr><td><b>File System:</b></td><td style=\"padding-left: 10px; padding-right: 10px\">{fs_display}</td><td style=\"padding-left: 10px\"><b>Owner:</b></td><td style=\"padding-left: 10px\">{user} ({uid})</td><td style=\"padding-left: 10px\"><b>Access Permissions:</b></td><td style=\"padding-left: 10px\">{permissions}</td></tr>
 <tr><td><b>Directory:</b></td><td style=\"padding-left: 10px; padding-right: 10px\">{dir_name}</td><td style=\"padding-left: 10px\"><b>Owner Group:</b></td><td style=\"padding-left: 10px\">{group} ({gid})</td><td style=\"padding-left: 10px\"><b>User/Owner:</b></td><td style=\"padding-left: 10px\">{user_can}</td></tr>
-<tr><td><b>Path:</b></td><td style=\"padding-left: 10px; padding-right: 10px\">{path}</td><td style=\"padding-left: 10px\"><b>Group Members:</b></td><td style=\"padding-left: 10px\">{group_members}</td><td style=\"padding-left: 10px\"><b>Group:</b></td><td style=\"padding-left: 10px\">{group_can}</td></tr>
+<tr><td><b>Path:</b></td><td style=\"padding-left: 10px; padding-right: 10px\">{path_display}</td><td style=\"padding-left: 10px\"><b>Group Members:</b></td><td style=\"padding-left: 10px\">{group_members}</td><td style=\"padding-left: 10px\"><b>Group:</b></td><td style=\"padding-left: 10px\">{group_can}</td></tr>
 <tr><td><b>Contents:</b></td><td style=\"padding-left: 10px; padding-right: 10px\" colspan=\"3\">{total_items} items ({dirs_count} folders, {files_count} files) {file_sizes}</td><td style=\"padding-left: 10px\"><b>Others:</b></td><td style=\"padding-left: 10px\">{other_can}</td></tr>
 </table>"""
             self.general_label.setText(general_text)

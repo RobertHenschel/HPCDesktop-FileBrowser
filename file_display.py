@@ -101,6 +101,7 @@ class VerticalToolbar(QWidget):
                 background-color: #f0f0f0;
                 border: 2px outset #d0d0d0;
                 border-radius: 4px;
+                padding: 0px 0px 4px 0px;
             }
             QPushButton:hover {
                 background-color: #e0e0e0;
@@ -124,6 +125,7 @@ class VerticalToolbar(QWidget):
                 background-color: #f0f0f0;
                 border: 2px outset #d0d0d0;
                 border-radius: 4px;
+                padding: 0px 0px 3px 0px;
             }
             QPushButton:hover {
                 background-color: #e0e0e0;

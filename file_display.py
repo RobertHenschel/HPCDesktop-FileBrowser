@@ -81,7 +81,8 @@ class VerticalToolbar(QWidget):
     # Signals
     zoom_in_requested = pyqtSignal()
     zoom_out_requested = pyqtSignal()
-    options_requested = pyqtSignal()
+    foldersize_zero_requested = pyqtSignal()
+    foldersize_one_requested = pyqtSignal()
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -142,10 +143,10 @@ class VerticalToolbar(QWidget):
         self.zoom_out_btn.setToolTip("Zoom Out")
         layout.addWidget(self.zoom_out_btn)
         
-        # Options button (O)
-        self.options_btn = QPushButton("o")
-        self.options_btn.setFixedSize(20, 20)
-        self.options_btn.setStyleSheet("""
+        # Foldersize Zero button (0)
+        self.foldersize_zero_btn = QPushButton("o")
+        self.foldersize_zero_btn.setFixedSize(20, 20)
+        self.foldersize_zero_btn.setStyleSheet("""
             QPushButton {
                 font-size: 16px;
                 font-weight: bold;
@@ -162,9 +163,33 @@ class VerticalToolbar(QWidget):
                 background-color: #d0d0d0;
             }
         """)
-        self.options_btn.clicked.connect(self.options_requested.emit)
-        self.options_btn.setToolTip("Resize folder icons based on file counts in folder")
-        layout.addWidget(self.options_btn)
+        self.foldersize_zero_btn.clicked.connect(self.foldersize_zero_requested.emit)
+        self.foldersize_zero_btn.setToolTip("Resize folder icons based on file counts in folder")
+        layout.addWidget(self.foldersize_zero_btn)
+        
+        # Foldersize One button (1)
+        self.foldersize_one_btn = QPushButton("1")
+        self.foldersize_one_btn.setFixedSize(20, 20)
+        self.foldersize_one_btn.setStyleSheet("""
+            QPushButton {
+                font-size: 16px;
+                font-weight: bold;
+                background-color: #f0f0f0;
+                border: 2px outset #d0d0d0;
+                border-radius: 4px;
+                padding: 0px 0px 3px 0px;
+            }
+            QPushButton:hover {
+                background-color: #e0e0e0;
+            }
+            QPushButton:pressed {
+                border: 2px inset #d0d0d0;
+                background-color: #d0d0d0;
+            }
+        """)
+        self.foldersize_one_btn.clicked.connect(self.foldersize_one_requested.emit)
+        self.foldersize_one_btn.setToolTip("Build directory scan and resize folder icons")
+        layout.addWidget(self.foldersize_one_btn)
         
         # Add stretch to push buttons to top
         layout.addStretch()
@@ -412,7 +437,8 @@ class FileDisplay(QWidget):
         self.toolbar = VerticalToolbar()
         self.toolbar.zoom_in_requested.connect(self.zoom_in)
         self.toolbar.zoom_out_requested.connect(self.zoom_out)
-        self.toolbar.options_requested.connect(self.on_options_clicked)
+        self.toolbar.foldersize_zero_requested.connect(self.on_foldersize_zero_clicked)
+        self.toolbar.foldersize_one_requested.connect(self.on_foldersize_one_clicked)
         content_layout.addWidget(self.toolbar)
         
         # Main content area
@@ -822,6 +848,10 @@ class FileDisplay(QWidget):
         else:
             print(f"Cannot navigate to {path}: path does not exist or is not a directory") 
 
-    def on_options_clicked(self):
-        """Handle options button click - delegate to folder size action"""
-        foldersize_actions.on_foldersize_zero_clicked(self) 
+    def on_foldersize_zero_clicked(self):
+        """Handle foldersize zero button click - delegate to folder size action"""
+        foldersize_actions.on_foldersize_zero_clicked(self)
+    
+    def on_foldersize_one_clicked(self):
+        """Handle foldersize one button click - build scan and resize folders"""
+        foldersize_actions.on_foldersize_one_clicked(self) 

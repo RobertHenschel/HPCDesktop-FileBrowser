@@ -1,6 +1,6 @@
 import json
 import os
-from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QTreeWidget, QTreeWidgetItem, 
+from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTreeWidget, QTreeWidgetItem, 
                              QLabel, QFrame, QPushButton, QMenu, QAction)
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QFont
@@ -18,6 +18,7 @@ class Sidebar(QWidget):
         self.custom_paths = []  # Store custom paths for current session
         self.config_file = os.path.expanduser("~/.filebrowserconfig")
         self._updating_tree = False  # Flag to prevent recursive operations
+        self.add_path_button = None  # Will be created in custom paths widget
         self.load_custom_paths()  # Load saved custom paths
         self.setup_ui()
         self.populate_tree()
@@ -25,7 +26,7 @@ class Sidebar(QWidget):
     def setup_ui(self):
         """Setup the sidebar UI"""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(5, 0, 5, 0)
+        layout.setContentsMargins(5, 0, 5, 5)
         layout.setSpacing(5)
         
         # Title area to match file display header height
@@ -62,46 +63,6 @@ class Sidebar(QWidget):
         self.tree_widget.itemChanged.connect(self.on_item_changed)
         
         layout.addWidget(self.tree_widget)
-        
-        # Dashed separator line
-        separator_line = QFrame()
-        separator_line.setFrameShape(QFrame.HLine)
-        separator_line.setFrameShadow(QFrame.Sunken)
-        separator_line.setStyleSheet("""
-            QFrame {
-                border: 1px dashed #888888;
-                border-style: dashed;
-                margin: 5px 0px;
-            }
-        """)
-        layout.addWidget(separator_line)
-        
-        # Add Current Path button
-        self.add_path_button = QPushButton("Add Current Path")
-        self.add_path_button.setStyleSheet("""
-            QPushButton {
-                padding: 8px 12px;
-                font-weight: bold;
-                background-color: #0066cc;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                margin: 5px 0px;
-            }
-            QPushButton:hover {
-                background-color: #0052a3;
-            }
-            QPushButton:pressed {
-                background-color: #003d82;
-            }
-            QPushButton:disabled {
-                background-color: #cccccc;
-                color: #666666;
-            }
-        """)
-        self.add_path_button.clicked.connect(self.on_add_current_path)
-        self.add_path_button.setEnabled(False)  # Disabled until a path is selected
-        layout.addWidget(self.add_path_button)
         
         # Set minimum width
         self.setMinimumWidth(250)
@@ -145,9 +106,8 @@ class Sidebar(QWidget):
                 # Expand category by default
                 category_item.setExpanded(True)
             
-            # Add custom paths category if there are any custom paths
-            if self.custom_paths:
-                self._add_custom_paths_category()
+            # Always add custom paths category (even if empty)
+            self._add_custom_paths_category()
         finally:
             # Reconnect the signal and clear the flag
             self.tree_widget.itemChanged.connect(self.on_item_changed)
@@ -233,6 +193,7 @@ class Sidebar(QWidget):
     
     def on_add_current_path(self):
         """Handle Add Current Path button click"""
+        # Always emit signal - main window will handle current path validation
         self.add_current_path_requested.emit()
     
     def add_custom_path(self, name, path):
@@ -247,17 +208,63 @@ class Sidebar(QWidget):
         # Simply rebuild the entire tree - cleaner and avoids recursion
         self.populate_tree()
     
+    def create_custom_paths_widget(self):
+        """Create a custom widget with 'Custom Paths' label and '+' button"""
+        widget = QWidget()
+        layout = QHBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 4, 0)  # Small right margin for button
+        layout.setSpacing(5)
+        
+        # "Custom Paths" label
+        label = QLabel("Custom Paths")
+        font = label.font()
+        font.setBold(True)
+        label.setFont(font)
+        layout.addWidget(label)
+        
+        # Add stretch to push button to the right
+        layout.addStretch()
+        
+        # "+" button
+        self.add_path_button = QPushButton("+")
+        self.add_path_button.setFixedSize(16, 16)
+        self.add_path_button.setStyleSheet("""
+            QPushButton {
+                background-color: #0066cc;
+                color: white;
+                border: none;
+                border-radius: 8px;
+                font-weight: bold;
+                font-size: 12px;
+                text-align: center;
+                padding: 1px 0px 3px 0px;
+            }
+            QPushButton:hover {
+                background-color: #0052a3;
+            }
+            QPushButton:pressed {
+                background-color: #003d82;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+                color: #666666;
+            }
+        """)
+        self.add_path_button.clicked.connect(self.on_add_current_path)
+        # Button is always enabled - will use current path from details view
+        layout.addWidget(self.add_path_button)
+        
+        return widget
+    
     def _add_custom_paths_category(self):
         """Add the Custom Paths category to the tree"""
         # Create custom paths category item
         custom_category_item = QTreeWidgetItem(self.tree_widget)
-        custom_category_item.setText(0, "Custom Paths")
         custom_category_item.setData(0, Qt.UserRole, {'type': 'category', 'category': 'Custom Paths'})
         
-        # Set bold font for category
-        font = custom_category_item.font(0)
-        font.setBold(True)
-        custom_category_item.setFont(0, font)
+        # Set custom widget with label and button
+        custom_widget = self.create_custom_paths_widget()
+        self.tree_widget.setItemWidget(custom_category_item, 0, custom_widget)
         
         # Add all custom paths under this category
         for custom_path in self.custom_paths:
@@ -284,15 +291,13 @@ class Sidebar(QWidget):
         self.populate_tree()
     
     def set_current_path(self, path):
-        """Set the current path and enable/disable the Add Current Path button"""
-        if path and path.strip():
-            self.current_path = path
-            self.add_path_button.setEnabled(True)
-            self.add_path_button.setToolTip(f"Add current path: {path}")
-        else:
-            self.current_path = ""
-            self.add_path_button.setEnabled(False)
-            self.add_path_button.setToolTip("No current path selected")
+        """Set the current path and update the Add Current Path button tooltip"""
+        self.current_path = path if path and path.strip() else ""
+        if self.add_path_button:  # Check if button exists (created in custom widget)
+            if self.current_path:
+                self.add_path_button.setToolTip(f"Add current path: {self.current_path}")
+            else:
+                self.add_path_button.setToolTip("Add current path (no path selected)")
     
     def load_custom_paths(self):
         """Load custom paths from the configuration file"""

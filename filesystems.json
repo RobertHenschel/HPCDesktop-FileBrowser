@@ -5,7 +5,8 @@
             "filesystems": [
                 {
                     "name": "RED / Quartz",
-                    "path": "~"
+                    "path": "~",
+                    "quota_string": "home"
                 },
                 {
                     "name": "Big Red 200",
@@ -39,22 +40,26 @@
             "filesystems": [
                 {
                     "name": "Slate",
-                    "path": "/N/slate/$USER"
+                    "path": "/N/slate/$USER",
+                    "quota_string": "slate"
                 },
                 {
                     "name": "Slate Scratch",
-                    "path": "/N/scratch/$USER"
+                    "path": "/N/scratch/$USER",
+                    "quota_string": "scratch"
                 },
                 {
                     "category": "Slate Project",
                     "filesystems": [
                         {
                             "name": "hcp_dcwan",
-                            "path": "/N/project/hcp_dcwan"
+                            "path": "/N/project/hcp_dcwan",
+                            "quota_string": "condo_hcp_dcwan"
                         },
                         {
                             "name": "QuarryIU",
-                            "path": "/N/project/QuarryIU"
+                            "path": "/N/project/QuarryIU",
+                            "quota_string": "condo_QuarryIU"
                         }
                     ]
                 }

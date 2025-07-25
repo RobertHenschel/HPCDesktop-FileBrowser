@@ -89,6 +89,7 @@ class FileBrowser(QMainWindow):
         
         refresh_action = QAction('Refresh', self)
         refresh_action.setShortcut('F5')
+        refresh_action.triggered.connect(self.refresh_all)
         view_menu.addAction(refresh_action)
         
         # Help menu
@@ -242,6 +243,16 @@ class FileBrowser(QMainWindow):
             # Add the custom path to sidebar
             self.sidebar.add_custom_path(path_name, current_path)
             print(f"Added custom path: {path_name} -> {current_path}")
+    
+    def refresh_all(self):
+        """Refresh all components of the application"""
+        print("Refreshing application...")
+        # Refresh sidebar (which will reload quota information)
+        self.sidebar.refresh()
+        # Refresh file display
+        if hasattr(self.file_display, 'refresh'):
+            self.file_display.refresh()
+        print("Refresh completed")
 
 
 def main():

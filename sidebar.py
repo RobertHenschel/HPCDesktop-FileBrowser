@@ -1,9 +1,10 @@
 import json
 import os
+import subprocess
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTreeWidget, QTreeWidgetItem, 
                              QLabel, QFrame, QPushButton, QMenu, QAction)
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QFont
+from PyQt5.QtGui import QFont, QBrush, QColor
 
 
 class Sidebar(QWidget):
@@ -19,9 +20,70 @@ class Sidebar(QWidget):
         self.config_file = os.path.expanduser("~/.filebrowserconfig")
         self._updating_tree = False  # Flag to prevent recursive operations
         self.add_path_button = None  # Will be created in custom paths widget
+        self.quota_info = {}  # Store quota information
         self.load_custom_paths()  # Load saved custom paths
+        self.load_quota_info()  # Load quota information
         self.setup_ui()
         self.populate_tree()
+    
+    def load_quota_info(self):
+        """Load quota information by running the quota command"""
+        try:
+            # Run the quota command and capture output
+            result = subprocess.run(['quota'], capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                # Parse the quota output line by line
+                for line in result.stdout.strip().split('\n'):
+                    line = line.strip()
+                    if line and not line.startswith('Disk quotas') and not line.startswith('Filesystem'):
+                        # Skip empty lines and header lines
+                        if line and line[0].isalpha():  # Lines that start with filesystem names
+                            # Extract the first word as the quota key
+                            parts = line.split()
+                            if "files" in line:
+                                continue
+                            if parts:
+                                quota_key = parts[0]
+                                # strip line of all possible terminal control characters
+                                import re
+                                # Remove ANSI escape sequences (color codes, etc.)
+                                ansi_escape = re.compile(r'\x1B[@-_][0-?]*[ -/]*[@-~]')
+                                line = ansi_escape.sub('', line.strip())
+                                # if no % in line continue
+                                if '%' not in line:
+                                    continue
+                                # split line at % 
+                                quota_percent = line.split('%')[0]
+                                # Parse quota_percent from the end, taking only % and numbers, then reverse it
+                                quota_percent_chars = []
+                                for c in reversed(quota_percent):
+                                    if c.isdigit() or c == '%':
+                                        quota_percent_chars.append(c)
+                                    elif quota_percent_chars:
+                                        break
+                                quota_percent = ''.join(reversed(quota_percent_chars))+'%'
+                                self.quota_info[quota_key] = f"{quota_percent}"
+                                print(f"Quota info: {quota_key} -> {quota_percent}")
+            else:
+                print(f"Quota command failed with return code {result.returncode}")
+                print(f"Error output: {result.stderr}")
+        except subprocess.TimeoutExpired:
+            print("Quota command timed out")
+        except FileNotFoundError:
+            print("Quota command not found")
+        except Exception as e:
+            print(f"Error running quota command: {e}")
+    
+    def extract_quota_percentage(self, quota_string):
+        """Extract numeric percentage from quota string (e.g., '70%' -> 70)"""
+        try:
+            if quota_string and '%' in quota_string:
+                # Extract the numeric part before the %
+                percentage_str = quota_string.replace('%', '')
+                return int(percentage_str)
+        except (ValueError, AttributeError):
+            pass
+        return None
     
     def setup_ui(self):
         """Setup the sidebar UI"""
@@ -145,18 +207,39 @@ class Sidebar(QWidget):
                 # This is a regular filesystem item
                 name = item.get('name', 'Unknown')
                 path = item.get('path', '')
+                quota_string = item.get('quota_string', None)
+                
+                # Check if this filesystem has quota information
+                display_name = name
+                if quota_string and quota_string in self.quota_info:
+                    quota_line = self.quota_info[quota_string]
+                    display_name = f"{name} - {quota_line}"
                 
                 filesystem_item = QTreeWidgetItem(parent_item)
-                filesystem_item.setText(0, name)
+                filesystem_item.setText(0, display_name)
                 filesystem_item.setData(0, Qt.UserRole, {
                     'type': 'filesystem',
                     'name': name,
                     'path': path,
-                    'category': parent_category
+                    'category': parent_category,
+                    'quota_string': quota_string
                 })
                 
-                # Set tooltip with path information
-                filesystem_item.setToolTip(0, f"Path: {path}")
+                # Check quota percentage and set color to red if 90% or higher
+                if quota_string and quota_string in self.quota_info:
+                    quota_percentage = self.extract_quota_percentage(self.quota_info[quota_string])
+                    if quota_percentage is not None and quota_percentage >= 90:
+                        # Set text color to red for high quota usage
+                        filesystem_item.setForeground(0, QBrush(QColor(255, 0, 0)))
+                    elif quota_percentage is not None and quota_percentage >= 70:
+                        # Set text color to yellow for low quota usage
+                        filesystem_item.setForeground(0, QBrush(QColor(255, 165, 0)))
+                
+                # Set tooltip with path and quota information
+                tooltip = f"Path: {path}"
+                if quota_string and quota_string in self.quota_info:
+                    tooltip += f"\nQuota: {self.quota_info[quota_string]}"
+                filesystem_item.setToolTip(0, tooltip)
     
     def on_item_clicked(self, item, column):
         """Handle item click"""
@@ -180,6 +263,9 @@ class Sidebar(QWidget):
     
     def refresh(self):
         """Refresh the sidebar contents"""
+        # Reload quota information first
+        self.load_quota_info()
+        # Then repopulate the tree with updated quota info
         self.populate_tree()
     
     def get_selected_filesystem(self):

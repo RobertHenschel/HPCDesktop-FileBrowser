@@ -250,12 +250,17 @@ class DetailsView(QWidget):
             if len(group_members_display) > 40:
                 group_members_display = group_members_display[:20] + "..." + group_members_display[-20:]
 
+            # Count hidden files and folders
+            hidden_files = sum(1 for item in items if item.startswith('.') and os.path.isfile(os.path.join(path, item)))
+            hidden_dirs = sum(1 for item in items if os.path.isdir(os.path.join(path, item)) and item.startswith('.'))
+
             # General tab
             general_text = f"""<table border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"border:none\">
 <tr><td><b>File System:</b></td><td style=\"padding-left: 10px; padding-right: 10px\">{fs_display}</td><td style=\"padding-left: 10px\"><b>Owner:</b></td><td style=\"padding-left: 10px\">{user} ({uid})</td><td style=\"padding-left: 10px\"><b>Access Permissions:</b></td><td style=\"padding-left: 10px\">{permissions}</td></tr>
 <tr><td><b>Directory:</b></td><td style=\"padding-left: 10px; padding-right: 10px\">{dir_name}</td><td style=\"padding-left: 10px\"><b>Owner Group:</b></td><td style=\"padding-left: 10px\">{group} ({gid})</td><td style=\"padding-left: 10px\"><b>User/Owner:</b></td><td style=\"padding-left: 10px\">{user_can}</td></tr>
 <tr><td><b>Path:</b></td><td style=\"padding-left: 10px; padding-right: 10px\">{path_display}</td><td style=\"padding-left: 10px\"><b>Group Members:</b></td><td style=\"padding-left: 10px\">{group_members_display}</td><td style=\"padding-left: 10px\"><b>Group:</b></td><td style=\"padding-left: 10px\">{group_can}</td></tr>
 <tr><td><b>Contents:</b></td><td style=\"padding-left: 10px; padding-right: 10px\" colspan=\"3\">{total_items} items ({dirs_count} folders, {files_count} files) {file_sizes}</td><td style=\"padding-left: 10px\"><b>Others:</b></td><td style=\"padding-left: 10px\">{other_can}</td></tr>
+<tr><td><b>Hidden:</b></td><td style=\"padding-left: 10px; padding-right: 10px\" colspan=\"3\">{hidden_files+hidden_dirs} items ({hidden_dirs} folders, {hidden_files} files)</td></tr>
 </table>"""
             self.general_label.setText(general_text)
             self.general_label.setStyleSheet("color: #333333; background-color: transparent;")

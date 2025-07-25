@@ -4,9 +4,11 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QLabel, QFrame,
                              QTableWidget, QListWidget, QStackedWidget, 
                              QListWidgetItem, QGridLayout, QScrollArea, 
                              QHBoxLayout, QPushButton, QProgressBar, QToolBar, QAction, QAbstractScrollArea)
-from PyQt5.QtCore import Qt, pyqtSignal, QSize, QThread, QPropertyAnimation, QEasingCurve, QRectF
+from PyQt5.QtCore import Qt, pyqtSignal, QSize, QThread, QTimer, QPropertyAnimation, QEasingCurve, QRectF
 from PyQt5.QtGui import QFont, QIcon, QPixmap, QPainter, QTransform
 from PyQt5.QtSvg import QSvgRenderer
+
+import foldersize_actions
 
 
 class DirectoryWorker(QThread):
@@ -79,6 +81,7 @@ class VerticalToolbar(QWidget):
     # Signals
     zoom_in_requested = pyqtSignal()
     zoom_out_requested = pyqtSignal()
+    options_requested = pyqtSignal()
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -138,6 +141,30 @@ class VerticalToolbar(QWidget):
         self.zoom_out_btn.clicked.connect(self.zoom_out_requested.emit)
         self.zoom_out_btn.setToolTip("Zoom Out")
         layout.addWidget(self.zoom_out_btn)
+        
+        # Options button (O)
+        self.options_btn = QPushButton("o")
+        self.options_btn.setFixedSize(20, 20)
+        self.options_btn.setStyleSheet("""
+            QPushButton {
+                font-size: 16px;
+                font-weight: bold;
+                background-color: #f0f0f0;
+                border: 2px outset #d0d0d0;
+                border-radius: 4px;
+                padding: 0px 0px 3px 0px;
+            }
+            QPushButton:hover {
+                background-color: #e0e0e0;
+            }
+            QPushButton:pressed {
+                border: 2px inset #d0d0d0;
+                background-color: #d0d0d0;
+            }
+        """)
+        self.options_btn.clicked.connect(self.options_requested.emit)
+        self.options_btn.setToolTip("Resize folder icons based on file counts in folder")
+        layout.addWidget(self.options_btn)
         
         # Add stretch to push buttons to top
         layout.addStretch()
@@ -385,6 +412,7 @@ class FileDisplay(QWidget):
         self.toolbar = VerticalToolbar()
         self.toolbar.zoom_in_requested.connect(self.zoom_in)
         self.toolbar.zoom_out_requested.connect(self.zoom_out)
+        self.toolbar.options_requested.connect(self.on_options_clicked)
         content_layout.addWidget(self.toolbar)
         
         # Main content area
@@ -793,3 +821,7 @@ class FileDisplay(QWidget):
             self.directory_changed.emit(path)
         else:
             print(f"Cannot navigate to {path}: path does not exist or is not a directory") 
+
+    def on_options_clicked(self):
+        """Handle options button click - delegate to folder size action"""
+        foldersize_actions.on_foldersize_zero_clicked(self) 

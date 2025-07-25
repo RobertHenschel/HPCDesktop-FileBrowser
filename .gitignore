@@ -12,3 +12,6 @@ __pycache__/file_display.cpython-312.pyc
 __pycache__/details_view.cpython-312.pyc
 nsNotebook/__pycache__/notebook.cpython-313.pyc
 __pycache__/details_view.cpython-313 (Robert’s MacBook Air's conflicted copy 2025-07-24).pyc
+dirscans/*.json
+
+__pycache__/foldersize_actions.cpython-313.pyc

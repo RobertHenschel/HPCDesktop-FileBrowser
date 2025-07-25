@@ -162,13 +162,13 @@ def resize_folder_icons_by_file_count(file_display_widget, folder_file_counts):
     min_count = min(file_counts)
     max_count = max(file_counts)
     
-    # If all folders have the same count, use current zoom level
-    if min_count == max_count:
-        return
+    # Determine if we should use variable sizing
+    use_variable_sizing = (min_count != max_count)
     
     # Map to zoom levels (32 to 128)
     min_size = file_display_widget.zoom_levels[0]  # 32
     max_size = file_display_widget.zoom_levels[-1]  # 128
+    current_zoom_size = file_display_widget.zoom_levels[file_display_widget.current_zoom_index]
     
     # Update icons for folders in the current view
     for i in range(file_display_widget.file_list_widget.count()):
@@ -181,28 +181,87 @@ def resize_folder_icons_by_file_count(file_display_widget, folder_file_counts):
                     file_count = folder_file_counts[folder_name]
                     
                     # Calculate icon size based on file count
-                    if max_count > min_count:
-                        # Linear interpolation
+                    if use_variable_sizing:
+                        # Linear interpolation when counts vary
                         ratio = (file_count - min_count) / (max_count - min_count)
                         icon_size = int(min_size + ratio * (max_size - min_size))
                     else:
-                        icon_size = min_size
+                        # Use current zoom level when all counts are the same
+                        icon_size = current_zoom_size
                     
-                    # Create folder icon at the calculated size
-                    folder_icon = create_folder_icon_at_size(file_display_widget, icon_size)
+                    # Create folder icon at the calculated size with badge
+                    folder_icon = create_folder_icon_at_size(file_display_widget, icon_size, file_count)
                     if folder_icon:
                         item.setIcon(folder_icon)
 
 
-def create_folder_icon_at_size(file_display_widget, icon_size):
-    """Create a folder icon at the specified size"""
+def create_folder_icon_at_size(file_display_widget, icon_size, file_count=None):
+    """Create a folder icon at the specified size with optional file count badge"""
     try:
         folder_renderer = QSvgRenderer("resources/folder.svg")
         folder_pixmap = QPixmap(icon_size, icon_size)
         folder_pixmap.fill(Qt.transparent)
         painter = QPainter(folder_pixmap)
+        
+        # Render the folder icon
         file_display_widget._render_svg_centered(painter, folder_renderer, icon_size)
+        
+        # Add badge with file count if provided
+        if file_count is not None:
+            draw_file_count_badge(painter, icon_size, file_count)
+        
         painter.end()
         return QIcon(folder_pixmap)
     except Exception:
-        return None 
+        return None
+
+
+def draw_file_count_badge(painter, icon_size, file_count):
+    """Draw a badge with file count on the folder icon"""
+    from PyQt5.QtGui import QBrush, QPen, QFont
+    from PyQt5.QtCore import QRectF
+    
+    # Convert file count to string, with abbreviated format for large numbers
+    if file_count >= 1000000:
+        count_text = f"{file_count // 1000000}M"
+    elif file_count >= 1000:
+        count_text = f"{file_count // 1000}K"
+    else:
+        count_text = str(file_count)
+    
+    # Calculate badge size based on icon size and text length
+    badge_size = max(int(icon_size * 0.4), 16)  # At least 16px, up to 40% of icon
+    font_size = max(int(badge_size * 0.4), 8)   # Font proportional to badge
+    
+    # Position badge in top-right corner
+    badge_x = icon_size - badge_size - 2
+    badge_y = 2
+    
+    # Set up font
+    font = QFont()
+    font.setPointSize(font_size)
+    font.setBold(True)
+    painter.setFont(font)
+    
+    # Calculate text metrics to center text in badge
+    font_metrics = painter.fontMetrics()
+    text_width = font_metrics.width(count_text)
+    text_height = font_metrics.height()
+    
+    # Adjust badge size if text is too wide
+    if text_width > badge_size - 4:
+        badge_size = text_width + 6
+        badge_x = icon_size - badge_size - 2
+    
+    # Draw badge background (red circle)
+    painter.setBrush(QBrush(Qt.red))
+    painter.setPen(QPen(Qt.white, 1))
+    badge_rect = QRectF(badge_x, badge_y, badge_size, badge_size)
+    painter.drawEllipse(badge_rect)
+    
+    # Draw text centered in badge
+    text_x = badge_x + (badge_size - text_width) / 2
+    text_y = badge_y + (badge_size + text_height) / 2 - font_metrics.descent()
+    
+    painter.setPen(QPen(Qt.white))
+    painter.drawText(int(text_x), int(text_y), count_text) 

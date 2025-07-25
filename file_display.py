@@ -144,7 +144,7 @@ class VerticalToolbar(QWidget):
         layout.addWidget(self.zoom_out_btn)
         
         # Foldersize Zero button (0)
-        self.foldersize_zero_btn = QPushButton("o")
+        self.foldersize_zero_btn = QPushButton("0")
         self.foldersize_zero_btn.setFixedSize(20, 20)
         self.foldersize_zero_btn.setStyleSheet("""
             QPushButton {

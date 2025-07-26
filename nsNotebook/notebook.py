@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-from PyQt5.QtWidgets import QWidget, QTabWidget, QTabBar
+from PyQt5.QtWidgets import QWidget, QTabWidget, QTabBar, QLabel
 from PyQt5.QtCore import Qt, QRect
-from PyQt5.QtGui import QPainter, QFont, QColor, QPainterPath
+from PyQt5.QtGui import QPainter, QFont, QColor, QPainterPath, QPixmap
 
 class CustomTabBar(QTabBar):
     def __init__(self, parent=None):
@@ -102,6 +102,27 @@ class NotebookWidget(QTabWidget):
         # Tab colors (same as in CustomTabBar)
         self.tab_colors = [(132, 197, 219), (144, 199, 170), (140, 144, 191), (212,183,175), (255,243,168), (171,148,176), (236,151,86), (255,223,76)]
         
+        # Create repair icon widget
+        self.repair_icon = QLabel(self)
+        self.repair_icon.setStyleSheet("background: transparent;")
+        try:
+            pixmap = QPixmap("./resources/repair.png")
+            if not pixmap.isNull():
+                # Size icon to match tab height (approximately 30 pixels)
+                scaled_pixmap = pixmap.scaled(15, 15, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                self.repair_icon.setPixmap(scaled_pixmap)
+            else:
+                # Fallback if image doesn't load
+                self.repair_icon.setText("🔧")
+                self.repair_icon.setAlignment(Qt.AlignCenter)
+        except Exception:
+            # Fallback if there's any error loading the image
+            self.repair_icon.setText("🔧")
+            self.repair_icon.setAlignment(Qt.AlignCenter)
+        
+        self.repair_icon.setFixedSize(25, 25)
+        self.repair_icon.show()
+        
         # Create tabs
         if tabs:
             for name, widget in tabs:
@@ -164,6 +185,26 @@ class NotebookWidget(QTabWidget):
             """)
         return index
     
+    def resizeEvent(self, event):
+        """Override resize event to position the repair icon next to the tabs"""
+        super().resizeEvent(event)
+        
+        # Position the repair icon to the right of the tabs
+        tab_bar = self.tabBar()
+        if tab_bar and self.repair_icon:
+            # Calculate position: to the right of all tabs with some margin
+            last_tab_right = 0
+            if tab_bar.count() > 0:
+                last_tab_rect = tab_bar.get_visual_tab_rect(tab_bar.count() - 1)
+                last_tab_right = last_tab_rect.right()
+            
+            # Position icon with 10px margin from last tab
+            icon_x = last_tab_right + 50
+            # Adjust vertical position to better align with the visual center of the tabs
+            icon_y = (tab_bar.height() - self.repair_icon.height()) // 2 + 3 + 9
+            
+            self.repair_icon.move(icon_x, icon_y)
+
     def paintEvent(self, event):
         """Override paint event to draw the selected tab indicator line across content width."""
         super().paintEvent(event)

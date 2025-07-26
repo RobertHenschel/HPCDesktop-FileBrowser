@@ -9,6 +9,26 @@ class CustomTabBar(QTabBar):
         self.setDrawBase(False)
         self.setStyleSheet("QTabBar { background: transparent; }")
     
+    def mousePressEvent(self, event):
+        # Do our own hit testing with visual positions
+        clicked_tab = self.visual_tab_at(event.pos())
+        if clicked_tab >= 0:
+            # Set the current tab directly instead of relying on Qt's hit testing
+            self.setCurrentIndex(clicked_tab)
+            # Don't call super() to prevent Qt's default behavior
+        else:
+            # No tab hit, proceed with default behavior
+            super().mousePressEvent(event)
+    
+    def visual_tab_at(self, pos):
+        """Custom hit testing using visual tab positions"""
+        # Check tabs from right to left since rightmost tabs are visually on top
+        for i in range(self.count() - 1, -1, -1):
+            visual_rect = self.get_visual_tab_rect(i)
+            if visual_rect.contains(pos):
+                return i
+        return -1
+    
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
@@ -84,6 +104,7 @@ class CustomTabBar(QTabBar):
         """Override tab hit testing to use visual positions."""
         for i in range(self.count()):
             visual_rect = self.get_visual_tab_rect(i)
+            print(visual_rect)
             if visual_rect.contains(pos):
                 return i
         return -1

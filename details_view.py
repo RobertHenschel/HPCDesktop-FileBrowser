@@ -48,13 +48,11 @@ class DetailsView(QWidget):
         self.general_tab = self.create_general_tab()
         self.properties_tab = self.create_properties_tab()
         self.details_tab = self.create_details_tab()
-        self.metadata_tab = self.create_metadata_tab()
         
         tabs = [
-            ("General", self.general_tab),
-            ("Properties", self.properties_tab),
-            ("Details", self.details_tab),
-            ("Metadata", self.metadata_tab)
+            ("Overview", self.general_tab),
+            ("ACL", self.properties_tab),
+            ("Extended Attributes", self.details_tab)
         ]
         
         # Create notebook widget with custom tabs
@@ -109,31 +107,7 @@ class DetailsView(QWidget):
         
         return widget
     
-    def create_metadata_tab(self):
-        """Create the metadata tab"""
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        layout.setContentsMargins(10, 10, 10, 10)
-        
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setStyleSheet("QScrollArea { border: none; background: transparent; }")
-        
-        self.metadata_content = QWidget()
-        self.metadata_layout = QVBoxLayout(self.metadata_content)
-        self.metadata_layout.setContentsMargins(5, 5, 5, 5)
-        
-        self.metadata_label = QLabel("No item selected")
-        self.metadata_label.setStyleSheet("color: #333333; font-style: italic; background-color: transparent;")
-        self.metadata_label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
-        self.metadata_label.setWordWrap(True)
-        self.metadata_layout.addWidget(self.metadata_label)
-        self.metadata_layout.addStretch()
-        
-        scroll_area.setWidget(self.metadata_content)
-        layout.addWidget(scroll_area)
-        
-        return widget
+
         
     def set_current_directory(self, path):
         """Update the details view with information about the current directory"""
@@ -254,7 +228,7 @@ class DetailsView(QWidget):
             hidden_files = sum(1 for item in items if item.startswith('.') and os.path.isfile(os.path.join(path, item)))
             hidden_dirs = sum(1 for item in items if os.path.isdir(os.path.join(path, item)) and item.startswith('.'))
 
-            # General tab
+            # Overview tab
             general_text = f"""<table border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"border:none\">
 <tr><td><b>File System:</b></td><td style=\"padding-left: 10px; padding-right: 10px\">{fs_display}</td><td style=\"padding-left: 10px\"><b>Owner:</b></td><td style=\"padding-left: 10px\">{user} ({uid})</td><td style=\"padding-left: 10px\"><b>Access Permissions:</b></td><td style=\"padding-left: 10px\">{permissions}</td></tr>
 <tr><td><b>Directory:</b></td><td style=\"padding-left: 10px; padding-right: 10px\">{dir_name}</td><td style=\"padding-left: 10px\"><b>Owner Group:</b></td><td style=\"padding-left: 10px\">{group} ({gid})</td><td style=\"padding-left: 10px\"><b>User/Owner:</b></td><td style=\"padding-left: 10px\">{user_can}</td></tr>
@@ -265,7 +239,7 @@ class DetailsView(QWidget):
             self.general_label.setText(general_text)
             self.general_label.setStyleSheet("color: #333333; background-color: transparent;")
             
-            # Properties tab
+            # ACL tab
             created = datetime.datetime.fromtimestamp(stat_info.st_ctime).strftime("%Y-%m-%d %H:%M:%S")
             modified = datetime.datetime.fromtimestamp(stat_info.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
             accessed = datetime.datetime.fromtimestamp(stat_info.st_atime).strftime("%Y-%m-%d %H:%M:%S")
@@ -279,7 +253,7 @@ class DetailsView(QWidget):
             self.properties_label.setText(properties_text)
             self.properties_label.setStyleSheet("color: #333333; background-color: transparent;")
             
-            # Details tab
+            # Extended Attributes tab
             details_text = f"""<b>Full Path:</b> {os.path.abspath(path)}
 <br><b>Parent Directory:</b> {os.path.dirname(path)}
 <br><b>Type:</b> Directory
@@ -288,22 +262,13 @@ class DetailsView(QWidget):
             self.details_label.setText(details_text)
             self.details_label.setStyleSheet("color: #333333; background-color: transparent;")
             
-            # Metadata tab
-            metadata_text = f"""<b>System Information:</b>
-<br>• Inode: {stat_info.st_ino}
-<br>• Device: {stat_info.st_dev}
-<br>• Number of links: {stat_info.st_nlink}
-<br>• Block size: {getattr(stat_info, 'st_blksize', 'N/A')}
-<br>• Blocks: {getattr(stat_info, 'st_blocks', 'N/A')}"""
-            self.metadata_label.setText(metadata_text)
-            self.metadata_label.setStyleSheet("color: #333333; background-color: transparent;")
+
             
         except Exception as e:
             error_text = f"<b>Error reading directory:</b> {str(e)}"
             self.general_label.setText(error_text)
             self.properties_label.setText(error_text)
             self.details_label.setText(error_text)
-            self.metadata_label.setText(error_text)
     
     def update_file_info(self, path):
         """Update tabs with file information"""
@@ -326,7 +291,7 @@ class DetailsView(QWidget):
             _, ext = os.path.splitext(filename)
             file_type = ext.upper()[1:] if ext else "File"
             
-            # General tab
+            # Overview tab
             general_text = f"""<b>File:</b> {filename}
 <br><b>Path:</b> {path}
 <br><b>Size:</b> {size_str}
@@ -334,7 +299,7 @@ class DetailsView(QWidget):
             self.general_label.setText(general_text)
             self.general_label.setStyleSheet("color: #333333; background-color: transparent;")
             
-            # Properties tab
+            # ACL tab
             mode = stat_info.st_mode
             permissions = stat.filemode(mode)
             created = datetime.datetime.fromtimestamp(stat_info.st_ctime).strftime("%Y-%m-%d %H:%M:%S")
@@ -351,7 +316,7 @@ class DetailsView(QWidget):
             self.properties_label.setText(properties_text)
             self.properties_label.setStyleSheet("color: #333333; background-color: transparent;")
             
-            # Details tab
+            # Extended Attributes tab
             details_text = f"""<b>Full Path:</b> {os.path.abspath(path)}
 <br><b>Directory:</b> {os.path.dirname(path)}
 <br><b>Filename:</b> {os.path.splitext(filename)[0]}
@@ -362,39 +327,13 @@ class DetailsView(QWidget):
             self.details_label.setText(details_text)
             self.details_label.setStyleSheet("color: #333333; background-color: transparent;")
             
-            # Metadata tab
-            metadata_text = f"""<b>System Information:</b>
-<br>• Inode: {stat_info.st_ino}
-<br>• Device: {stat_info.st_dev}
-<br>• Number of links: {stat_info.st_nlink}
-<br>• Block size: {getattr(stat_info, 'st_blksize', 'N/A')}
-<br>• Blocks: {getattr(stat_info, 'st_blocks', 'N/A')}
 
-<br><br><b>File Information:</b>
-<br>• Absolute path: {os.path.abspath(path)}
-<br>• Real path: {os.path.realpath(path)}
-<br>• Is symbolic link: {os.path.islink(path)}"""
-            
-            # Add MIME type if possible
-            try:
-                import mimetypes
-                mime_type, encoding = mimetypes.guess_type(path)
-                if mime_type:
-                    metadata_text += f"<br>• MIME type: {mime_type}"
-                if encoding:
-                    metadata_text += f"<br>• Encoding: {encoding}"
-            except:
-                pass
                 
-            self.metadata_label.setText(metadata_text)
-            self.metadata_label.setStyleSheet("color: #333333; background-color: transparent;")
-            
         except Exception as e:
             error_text = f"<b>Error reading file:</b> {str(e)}"
             self.general_label.setText(error_text)
             self.properties_label.setText(error_text)
             self.details_label.setText(error_text)
-            self.metadata_label.setText(error_text)
     
     def clear_info(self):
         """Clear all tab information"""
@@ -409,9 +348,6 @@ class DetailsView(QWidget):
         
         self.details_label.setText(clear_text)
         self.details_label.setStyleSheet(style)
-        
-        self.metadata_label.setText(clear_text)
-        self.metadata_label.setStyleSheet(style)
     
     def clear(self):
         """Clear the details view"""

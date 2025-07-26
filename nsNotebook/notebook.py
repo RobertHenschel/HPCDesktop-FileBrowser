@@ -340,7 +340,7 @@ class NotebookWidget(QTabWidget):
             last_tab_right = 0
             if tab_bar.count() > 0:
                 last_tab_rect = tab_bar.get_visual_tab_rect(tab_bar.count() - 1)
-                last_tab_right = last_tab_rect.right()
+                last_tab_right = last_tab_rect.right() + tab_bar.count() * 20
             
             # Position repair icon with 50px margin from last tab
             repair_icon_x = last_tab_right + 50

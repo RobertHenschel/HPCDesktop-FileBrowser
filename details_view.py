@@ -280,12 +280,20 @@ class DetailsView(QWidget):
             modified = datetime.datetime.fromtimestamp(stat_info.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
             accessed = datetime.datetime.fromtimestamp(stat_info.st_atime).strftime("%Y-%m-%d %H:%M:%S")
             
-            properties_text = f"""<b>Permissions:</b> {permissions}
-<br><b>Owner UID:</b> {stat_info.st_uid}
-<br><b>Group GID:</b> {stat_info.st_gid}
-<br><b>Created:</b> {created}
-<br><b>Modified:</b> {modified}
-<br><b>Accessed:</b> {accessed}"""
+            # Print the ACL info if available, otherwise show a message
+            if acl_support:
+                try:
+                    import posix1e
+                    acl = posix1e.ACL(file=path)
+                    if acl:
+                        acl_html = str(acl)
+                        properties_text = f"""<b>ACL:</b><pre style="font-family:monospace">{acl_html}</pre>"""
+                    else:
+                        properties_text = "<b>ACL:</b><br>No ACL entries found."
+                except Exception as e:
+                    properties_text = f"<b>ACL:</b><br>Error reading ACL: {str(e)}"
+            else:
+                properties_text = "<b>ACL:</b><br>Not supported on this platform."
             self.properties_label.setText(properties_text)
             self.properties_label.setStyleSheet("color: #333333; background-color: transparent;")
             

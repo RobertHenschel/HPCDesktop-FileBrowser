@@ -157,6 +157,37 @@ class NotebookWidget(QTabWidget):
         self.repair_icon.setToolTip("Open in file manager")
         self.repair_icon.show()
         
+        # Create terminal icon widget as a clickable button
+        self.terminal_icon = QPushButton(self)
+        self.terminal_icon.setStyleSheet("""
+            QPushButton { 
+                background: transparent; 
+                border: none; 
+                padding: 2px;
+            }
+            QPushButton:hover { 
+                background-color: rgba(0, 0, 0, 20); 
+                border-radius: 3px;
+            }
+        """)
+        try:
+            pixmap = QPixmap("./resources/terminal.png")
+            if not pixmap.isNull():
+                # Size icon to match tab height (approximately 30 pixels)
+                scaled_pixmap = pixmap.scaled(15, 15, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                self.terminal_icon.setIcon(QIcon(scaled_pixmap))
+            else:
+                # Fallback if image doesn't load
+                self.terminal_icon.setText("⌨")
+        except Exception:
+            # Fallback if there's any error loading the image
+            self.terminal_icon.setText("⌨")
+        
+        self.terminal_icon.setFixedSize(25, 25)
+        self.terminal_icon.clicked.connect(self.open_terminal)
+        self.terminal_icon.setToolTip("Open terminal here")
+        self.terminal_icon.show()
+        
         # Create tabs
         if tabs:
             for name, widget in tabs:
@@ -205,6 +236,49 @@ class NotebookWidget(QTabWidget):
                             print("No supported file manager found")
             else:
                 print(f"File manager not found for {system}")
+    
+    def open_terminal(self):
+        """Open a terminal in the current path"""
+        if not self.details_view or not hasattr(self.details_view, 'current_path'):
+            print("No current path available")
+            return
+            
+        current_path = self.details_view.current_path
+        if not current_path:
+            print("Current path is empty")
+            return
+            
+        try:
+            system = platform.system()
+            if system == "Darwin":  # macOS
+                # Use osascript to open Terminal.app with the specific directory
+                script = f'tell application "Terminal" to do script "cd \\"{current_path}\\""'
+                subprocess.run(["osascript", "-e", script], check=True, 
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            elif system == "Linux":  # Linux
+                subprocess.run(["mate-terminal", "--working-directory", current_path], check=True)
+            else:
+                print(f"Unsupported operating system: {system}")
+        except subprocess.CalledProcessError as e:
+            print(f"Error opening terminal: {e}")
+        except FileNotFoundError:
+            if system == "Linux":
+                # Fallback to other common Linux terminals
+                try:
+                    subprocess.run(["gnome-terminal", "--working-directory", current_path], check=True)
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    try:
+                        subprocess.run(["konsole", "--workdir", current_path], check=True)
+                    except (subprocess.CalledProcessError, FileNotFoundError):
+                        try:
+                            subprocess.run(["xfce4-terminal", "--working-directory", current_path], check=True)
+                        except (subprocess.CalledProcessError, FileNotFoundError):
+                            try:
+                                subprocess.run(["terminator", "--working-directory", current_path], check=True)
+                            except (subprocess.CalledProcessError, FileNotFoundError):
+                                print("No supported terminal found")
+            else:
+                print(f"Terminal not found for {system}")
     
     def apply_tab_colors(self):
         """Apply matching background colors to tab content widgets"""
@@ -257,10 +331,10 @@ class NotebookWidget(QTabWidget):
         return index
     
     def resizeEvent(self, event):
-        """Override resize event to position the repair icon next to the tabs"""
+        """Override resize event to position the icons next to the tabs"""
         super().resizeEvent(event)
         
-        # Position the repair icon to the right of the tabs
+        # Position the icons to the right of the tabs
         tab_bar = self.tabBar()
         if tab_bar and self.repair_icon:
             # Calculate position: to the right of all tabs with some margin
@@ -269,12 +343,17 @@ class NotebookWidget(QTabWidget):
                 last_tab_rect = tab_bar.get_visual_tab_rect(tab_bar.count() - 1)
                 last_tab_right = last_tab_rect.right()
             
-            # Position icon with 10px margin from last tab
-            icon_x = last_tab_right + 50
+            # Position repair icon with 50px margin from last tab
+            repair_icon_x = last_tab_right + 50
             # Adjust vertical position to better align with the visual center of the tabs
             icon_y = (tab_bar.height() - self.repair_icon.height()) // 2 + 3 + 9
             
-            self.repair_icon.move(icon_x, icon_y)
+            self.repair_icon.move(repair_icon_x, icon_y)
+            
+            # Position terminal icon next to repair icon with 5px spacing
+            if hasattr(self, 'terminal_icon') and self.terminal_icon:
+                terminal_icon_x = repair_icon_x + self.repair_icon.width() + 5
+                self.terminal_icon.move(terminal_icon_x, icon_y)
 
     def paintEvent(self, event):
         """Override paint event to draw the selected tab indicator line across content width."""

@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-from PyQt5.QtWidgets import QWidget, QTabWidget, QTabBar, QLabel
+import subprocess
+import platform
+from PyQt5.QtWidgets import QWidget, QTabWidget, QTabBar, QLabel, QPushButton
 from PyQt5.QtCore import Qt, QRect
-from PyQt5.QtGui import QPainter, QFont, QColor, QPainterPath, QPixmap
+from PyQt5.QtGui import QPainter, QFont, QColor, QPainterPath, QPixmap, QIcon
 
 class CustomTabBar(QTabBar):
     def __init__(self, parent=None):
@@ -110,8 +112,9 @@ class CustomTabBar(QTabBar):
         return -1
 
 class NotebookWidget(QTabWidget):
-    def __init__(self, parent=None, tabs=None):
+    def __init__(self, parent=None, tabs=None, details_view=None):
         super().__init__(parent)
+        self.details_view = details_view  # Reference to parent details view for accessing current path
         self.setTabPosition(QTabWidget.North)
         self.setTabBar(CustomTabBar())
         self.setStyleSheet("""
@@ -123,25 +126,35 @@ class NotebookWidget(QTabWidget):
         # Tab colors (same as in CustomTabBar)
         self.tab_colors = [(132, 197, 219), (144, 199, 170), (140, 144, 191), (212,183,175), (255,243,168), (171,148,176), (236,151,86), (255,223,76)]
         
-        # Create repair icon widget
-        self.repair_icon = QLabel(self)
-        self.repair_icon.setStyleSheet("background: transparent;")
+        # Create repair icon widget as a clickable button
+        self.repair_icon = QPushButton(self)
+        self.repair_icon.setStyleSheet("""
+            QPushButton { 
+                background: transparent; 
+                border: none; 
+                padding: 2px;
+            }
+            QPushButton:hover { 
+                background-color: rgba(0, 0, 0, 20); 
+                border-radius: 3px;
+            }
+        """)
         try:
             pixmap = QPixmap("./resources/repair.png")
             if not pixmap.isNull():
                 # Size icon to match tab height (approximately 30 pixels)
                 scaled_pixmap = pixmap.scaled(15, 15, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-                self.repair_icon.setPixmap(scaled_pixmap)
+                self.repair_icon.setIcon(QIcon(scaled_pixmap))
             else:
                 # Fallback if image doesn't load
                 self.repair_icon.setText("🔧")
-                self.repair_icon.setAlignment(Qt.AlignCenter)
         except Exception:
             # Fallback if there's any error loading the image
             self.repair_icon.setText("🔧")
-            self.repair_icon.setAlignment(Qt.AlignCenter)
         
         self.repair_icon.setFixedSize(25, 25)
+        self.repair_icon.clicked.connect(self.open_file_manager)
+        self.repair_icon.setToolTip("Open in file manager")
         self.repair_icon.show()
         
         # Create tabs
@@ -155,6 +168,43 @@ class NotebookWidget(QTabWidget):
         
         # Apply background colors to tab contents
         self.apply_tab_colors()
+    
+    def open_file_manager(self):
+        """Open the current path in the system file manager"""
+        if not self.details_view or not hasattr(self.details_view, 'current_path'):
+            print("No current path available")
+            return
+            
+        current_path = self.details_view.current_path
+        if not current_path:
+            print("Current path is empty")
+            return
+            
+        try:
+            system = platform.system()
+            if system == "Darwin":  # macOS
+                subprocess.run(["open", current_path], check=True)
+            elif system == "Linux":  # Linux
+                subprocess.run(["caja", current_path], check=True)
+            else:
+                print(f"Unsupported operating system: {system}")
+        except subprocess.CalledProcessError as e:
+            print(f"Error opening file manager: {e}")
+        except FileNotFoundError:
+            if system == "Linux":
+                # Fallback to other common Linux file managers
+                try:
+                    subprocess.run(["nautilus", current_path], check=True)
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    try:
+                        subprocess.run(["dolphin", current_path], check=True)
+                    except (subprocess.CalledProcessError, FileNotFoundError):
+                        try:
+                            subprocess.run(["thunar", current_path], check=True)
+                        except (subprocess.CalledProcessError, FileNotFoundError):
+                            print("No supported file manager found")
+            else:
+                print(f"File manager not found for {system}")
     
     def apply_tab_colors(self):
         """Apply matching background colors to tab content widgets"""

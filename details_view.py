@@ -58,7 +58,7 @@ class DetailsView(QWidget):
         ]
         
         # Create notebook widget with custom tabs
-        self.notebook = NotebookWidget(tabs=tabs)
+        self.notebook = NotebookWidget(tabs=tabs, details_view=self)
         layout.addWidget(self.notebook)
         
         # Set minimum height

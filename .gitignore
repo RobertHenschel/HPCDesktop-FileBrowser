@@ -15,3 +15,11 @@ __pycache__/details_view.cpython-313 (Robert’s MacBook Air's conflicted copy 2
 dirscans/*.json
 
 __pycache__/foldersize_actions.cpython-313.pyc
+__pycache__/details_view.cpython-311.pyc
+__pycache__/sidebar.cpython-311.pyc
+__pycache__/toolbar.cpython-311.pyc
+dirscans/output.db
+nsNotebook/__pycache__/notebook.cpython-311.pyc
+nsNotebook/__pycache__/__init__.cpython-311.pyc
+__pycache__/file_display.cpython-311.pyc
+__pycache__/foldersize_actions.cpython-311.pyc

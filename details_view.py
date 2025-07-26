@@ -3,6 +3,7 @@ import pwd
 import grp
 import stat
 import datetime
+import platform
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QTextEdit, QScrollArea
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont, QPalette
@@ -228,13 +229,48 @@ class DetailsView(QWidget):
             hidden_files = sum(1 for item in items if item.startswith('.') and os.path.isfile(os.path.join(path, item)))
             hidden_dirs = sum(1 for item in items if os.path.isdir(os.path.join(path, item)) and item.startswith('.'))
 
+            # check for ACLs on the current directory
+            # if platform is Linux, set ACL support to true
+            if platform.system() == 'Linux':
+                acl_support = True
+            else:
+                acl_support = False
+            if acl_support:
+                try:
+                    import posix1e
+                    acl = posix1e.ACL(file=path)
+                    # Check for extended ACL entries beyond the standard owner/group/other permissions
+                    # Standard entries are: ACL_USER_OBJ, ACL_GROUP_OBJ, ACL_OTHER, ACL_MASK
+                    # Extended ACLs have tag types: ACL_USER, ACL_GROUP
+                    has_acls = False
+                    for entry in acl:
+                        if entry.tag_type in (posix1e.ACL_USER, posix1e.ACL_GROUP):
+                            has_acls = True
+                            break
+                    if has_acls:
+                        print(f"ACLs present on directory: {path}")
+                except Exception as e:
+                    # If pylibacl library is not available or error occurs, do nothing
+                    print(f"Error checking for ACLs on directory: {path}: {str(e)}")
+                    pass
+
+
             # Overview tab
+            if not acl_support:
+                acl_display = "Not Supported"
+            else:
+                # Format ACL display with conditional coloring
+                if has_acls is True:
+                    acl_display = '<span style="color: red; font-weight: bold;">Yes</span>'
+                elif has_acls is False:
+                    acl_display = 'No'
+            
             general_text = f"""<table border=\"0\" cellspacing=\"0\" cellpadding=\"0\" style=\"border:none\">
 <tr><td><b>File System:</b></td><td style=\"padding-left: 10px; padding-right: 10px\">{fs_display}</td><td style=\"padding-left: 10px\"><b>Owner:</b></td><td style=\"padding-left: 10px\">{user} ({uid})</td><td style=\"padding-left: 10px\"><b>Access Permissions:</b></td><td style=\"padding-left: 10px\">{permissions}</td></tr>
 <tr><td><b>Directory:</b></td><td style=\"padding-left: 10px; padding-right: 10px\">{dir_name}</td><td style=\"padding-left: 10px\"><b>Owner Group:</b></td><td style=\"padding-left: 10px\">{group} ({gid})</td><td style=\"padding-left: 10px\"><b>User/Owner:</b></td><td style=\"padding-left: 10px\">{user_can}</td></tr>
 <tr><td><b>Path:</b></td><td style=\"padding-left: 10px; padding-right: 10px\">{path_display}</td><td style=\"padding-left: 10px\"><b>Group Members:</b></td><td style=\"padding-left: 10px\">{group_members_display}</td><td style=\"padding-left: 10px\"><b>Group:</b></td><td style=\"padding-left: 10px\">{group_can}</td></tr>
 <tr><td><b>Contents:</b></td><td style=\"padding-left: 10px; padding-right: 10px\" colspan=\"3\">{total_items} items ({dirs_count} folders, {files_count} files) {file_sizes}</td><td style=\"padding-left: 10px\"><b>Others:</b></td><td style=\"padding-left: 10px\">{other_can}</td></tr>
-<tr><td><b>Hidden:</b></td><td style=\"padding-left: 10px; padding-right: 10px\" colspan=\"3\">{hidden_files+hidden_dirs} items ({hidden_dirs} folders, {hidden_files} files)</td></tr>
+<tr><td><b>Hidden:</b></td><td style=\"padding-left: 10px; padding-right: 10px\" colspan=\"3\">{hidden_files+hidden_dirs} items ({hidden_dirs} folders, {hidden_files} files)</td><td style=\"padding-left: 10px\"><b>ACLs:</b></td><td style=\"padding-left: 10px\">{acl_display}</td></tr>
 </table>"""
             self.general_label.setText(general_text)
             self.general_label.setStyleSheet("color: #333333; background-color: transparent;")

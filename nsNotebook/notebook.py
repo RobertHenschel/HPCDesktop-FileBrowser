@@ -9,7 +9,7 @@ class CustomTabBar(QTabBar):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setDrawBase(False)
-        self.setStyleSheet("QTabBar { background: transparent; }")
+        self.setStyleSheet("QTabBar { background-color: #f0f0f0; }")
     
     def mousePressEvent(self, event):
         # Do our own hit testing with visual positions
@@ -34,9 +34,8 @@ class CustomTabBar(QTabBar):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
-        painter.setCompositionMode(QPainter.CompositionMode_Clear)
-        painter.fillRect(event.rect(), Qt.transparent)
-        painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+        # Fill with solid background color instead of transparent
+        painter.fillRect(event.rect(), QColor(240, 240, 240))
         
         # Draw unselected tabs from right to left so left tabs overlap right tabs
         selected_index = self.currentIndex()
@@ -118,9 +117,9 @@ class NotebookWidget(QTabWidget):
         self.setTabPosition(QTabWidget.North)
         self.setTabBar(CustomTabBar())
         self.setStyleSheet("""
-            QTabWidget { background: transparent; }
+            QTabWidget { background-color: #f0f0f0; }
             QTabWidget::pane { border: 2px solid #888888; background-color: #f0f0f0; border-radius: 5px; margin-top: 0px; }
-            QTabWidget::tab-bar { alignment: left; background: transparent; }
+            QTabWidget::tab-bar { alignment: left; background-color: #f0f0f0; }
         """)
         
         # Tab colors (same as in CustomTabBar)

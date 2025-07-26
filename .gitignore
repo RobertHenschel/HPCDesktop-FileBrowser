@@ -23,3 +23,6 @@ nsNotebook/__pycache__/notebook.cpython-311.pyc
 nsNotebook/__pycache__/__init__.cpython-311.pyc
 __pycache__/file_display.cpython-311.pyc
 __pycache__/foldersize_actions.cpython-311.pyc
+dirscans/*.sqlite3
+aiAssistant/config.dat
+BR200.sqlite3

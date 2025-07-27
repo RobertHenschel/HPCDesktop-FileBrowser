@@ -14,11 +14,10 @@ import grp
 import subprocess
 import argparse
 import sqlite3
-import shutil
-import time
+
 from pathlib import Path
 from datetime import datetime
-import hashlib
+
 
 
 def run_command(cmd, ignore_errors=True):
@@ -36,157 +35,10 @@ def run_command(cmd, ignore_errors=True):
         return None if ignore_errors else f"Exception: {str(e)}"
 
 
-def get_file_hash(filepath, algorithm='md5', chunk_size=8192):
-    """Calculate file hash for small files (under 100MB)."""
-    try:
-        file_size = os.path.getsize(filepath)
-        if file_size > 100 * 1024 * 1024:  # Skip files larger than 100MB
-            return None
-        
-        hash_obj = hashlib.new(algorithm)
-        with open(filepath, 'rb') as f:
-            while chunk := f.read(chunk_size):
-                hash_obj.update(chunk)
-        return hash_obj.hexdigest()
-    except (IOError, OSError):
-        return None
 
 
-class CheckpointManager:
-    """Manages checkpoint/resume functionality for the scanner."""
-    
-    def __init__(self, output_file, directory_path):
-        # Create temp directory name based on output file or default
-        if output_file:
-            base_name = os.path.splitext(os.path.basename(output_file))[0]
-        else:
-            base_name = f"lustre_scan_{os.path.basename(os.path.abspath(directory_path))}"
-        
-        self.temp_dir = f".{base_name}_checkpoint"
-        self.progress_file = os.path.join(self.temp_dir, "scan_progress.json")
-        self.processed_files_file = os.path.join(self.temp_dir, "processed_files.txt")
-        self.partial_results_file = os.path.join(self.temp_dir, "results_partial.json")
-        
-        self.processed_files = set()
-        self.restart_count = 0
-        self.start_time = time.time()
-        self.initial_start_time = self.start_time
-        
-    def setup_checkpoint_dir(self):
-        """Create checkpoint directory if it doesn't exist."""
-        if not os.path.exists(self.temp_dir):
-            os.makedirs(self.temp_dir)
-            print(f"Created checkpoint directory: {self.temp_dir}", file=sys.stderr)
-        
-    def load_existing_progress(self):
-        """Load existing progress if resuming from a checkpoint."""
-        if os.path.exists(self.progress_file):
-            try:
-                with open(self.progress_file, 'r') as f:
-                    progress_data = json.load(f)
-                
-                self.restart_count = progress_data.get('restart_count', 0) + 1
-                self.initial_start_time = progress_data.get('initial_start_time', time.time())
-                
-                print(f"Resuming scan (restart #{self.restart_count})", file=sys.stderr)
-                print(f"Original scan started: {datetime.fromtimestamp(self.initial_start_time).isoformat()}", file=sys.stderr)
-                
-                return progress_data
-            except (json.JSONDecodeError, IOError) as e:
-                print(f"Warning: Could not load progress file: {e}", file=sys.stderr)
-                return None
-        return None
-    
-    def load_processed_files(self):
-        """Load list of already processed files."""
-        if os.path.exists(self.processed_files_file):
-            try:
-                with open(self.processed_files_file, 'r') as f:
-                    self.processed_files = set(line.strip() for line in f if line.strip())
-                print(f"Loaded {len(self.processed_files)} already processed files", file=sys.stderr)
-            except IOError as e:
-                print(f"Warning: Could not load processed files list: {e}", file=sys.stderr)
-    
-    def load_partial_results(self):
-        """Load partial results from previous run."""
-        if os.path.exists(self.partial_results_file):
-            try:
-                with open(self.partial_results_file, 'r') as f:
-                    return json.load(f)
-            except (json.JSONDecodeError, IOError) as e:
-                print(f"Warning: Could not load partial results: {e}", file=sys.stderr)
-        return None
-    
-    def save_progress(self, directory_path, total_files, processed_count):
-        """Save current progress to checkpoint."""
-        progress_data = {
-            'directory': directory_path,
-            'total_files': total_files,
-            'processed_count': processed_count,
-            'restart_count': self.restart_count,
-            'current_time': time.time(),
-            'initial_start_time': self.initial_start_time,
-            'elapsed_time': time.time() - self.initial_start_time
-        }
-        
-        try:
-            with open(self.progress_file, 'w') as f:
-                json.dump(progress_data, f, indent=2)
-        except IOError as e:
-            print(f"Warning: Could not save progress: {e}", file=sys.stderr)
-    
-    def mark_file_processed(self, filepath):
-        """Mark a file as processed."""
-        self.processed_files.add(filepath)
-        try:
-            with open(self.processed_files_file, 'a') as f:
-                f.write(f"{filepath}\n")
-        except IOError as e:
-            print(f"Warning: Could not update processed files list: {e}", file=sys.stderr)
-    
-    def save_partial_results(self, results):
-        """Save partial results to checkpoint."""
-        try:
-            with open(self.partial_results_file, 'w') as f:
-                json.dump(results, f, indent=2)
-        except IOError as e:
-            print(f"Warning: Could not save partial results: {e}", file=sys.stderr)
-    
-    def is_file_processed(self, filepath):
-        """Check if a file has already been processed."""
-        return filepath in self.processed_files
-    
-    def cleanup(self):
-        """Remove checkpoint directory and all temporary files."""
-        if os.path.exists(self.temp_dir):
-            try:
-                shutil.rmtree(self.temp_dir)
-                print(f"Cleaned up checkpoint directory: {self.temp_dir}", file=sys.stderr)
-            except OSError as e:
-                print(f"Warning: Could not clean up checkpoint directory: {e}", file=sys.stderr)
-    
-    def get_scan_stats(self):
-        """Get scan timing and restart statistics."""
-        total_elapsed = time.time() - self.initial_start_time
-        return {
-            'restart_count': self.restart_count,
-            'total_elapsed_seconds': total_elapsed,
-            'total_elapsed_formatted': format_duration(total_elapsed),
-            'initial_start_time': self.initial_start_time,
-            'initial_start_time_iso': datetime.fromtimestamp(self.initial_start_time).isoformat()
-        }
 
 
-def format_duration(seconds):
-    """Format duration in seconds to human readable format."""
-    if seconds < 60:
-        return f"{seconds:.1f} seconds"
-    elif seconds < 3600:
-        minutes = seconds / 60
-        return f"{minutes:.1f} minutes"
-    else:
-        hours = seconds / 3600
-        return f"{hours:.1f} hours"
 
 
 def get_standard_metadata(filepath):
@@ -274,13 +126,7 @@ def get_standard_metadata(filepath):
             except OSError:
                 metadata['symlink_target'] = None
         
-        # Add file hash for small regular files
-        if file_type == 'regular' and file_stat.st_size > 0:
-            metadata['checksums'] = {
-                'md5': get_file_hash(filepath, 'md5'),
-                'sha1': get_file_hash(filepath, 'sha1'),
-                'sha256': get_file_hash(filepath, 'sha256')
-            }
+
         
         return metadata
         
@@ -527,9 +373,6 @@ def create_database_schema(cursor, enable_lustre=False):
             lustre_version TEXT,
             total_files INTEGER,
             total_directories INTEGER,
-            restart_count INTEGER,
-            total_elapsed_seconds REAL,
-            initial_start_time TEXT,
             recursive BOOLEAN,
             lustre_enabled BOOLEAN
         )
@@ -729,17 +572,7 @@ def create_database_schema(cursor, enable_lustre=False):
         )
     ''')
     
-    # File checksums table
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS file_checksums (
-            id INTEGER PRIMARY KEY,
-            file_id INTEGER,
-            md5 TEXT,
-            sha1 TEXT,
-            sha256 TEXT,
-            FOREIGN KEY (file_id) REFERENCES files (id)
-        )
-    ''')
+
     
     # Lustre metadata table (only created if Lustre is enabled)
     if enable_lustre:
@@ -791,10 +624,9 @@ def insert_scan_data_to_db(cursor, results, enable_lustre=False):
     
     # Insert scan info
     scan_info = results['scan_info']
-    checkpoint_stats = scan_info.get('checkpoint_stats', {})
     cursor.execute('''
-        INSERT INTO scan_info (directory, scan_time, scan_completed, hostname, lustre_version, total_files, total_directories, restart_count, total_elapsed_seconds, initial_start_time, recursive, lustre_enabled)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO scan_info (directory, scan_time, scan_completed, hostname, lustre_version, total_files, total_directories, recursive, lustre_enabled)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         scan_info.get('directory'),
         scan_info.get('scan_time'),
@@ -803,9 +635,6 @@ def insert_scan_data_to_db(cursor, results, enable_lustre=False):
         scan_info.get('lustre_version'),
         scan_info.get('total_files'),
         scan_info.get('total_directories'),
-        checkpoint_stats.get('restart_count'),
-        checkpoint_stats.get('total_elapsed_seconds'),
-        scan_info.get('initial_start_time'),
         scan_info.get('recursive'),
         scan_info.get('lustre_enabled')
     ))
@@ -1001,15 +830,7 @@ def insert_scan_data_to_db(cursor, results, enable_lustre=False):
                 file_id, inode.get('number'), inode.get('device'), inode.get('links')
             ))
         
-        # Insert checksums
-        checksums = std_meta.get('checksums', {})
-        if checksums:
-            cursor.execute('''
-                INSERT INTO file_checksums (file_id, md5, sha1, sha256)
-                VALUES (?, ?, ?, ?)
-            ''', (
-                file_id, checksums.get('md5'), checksums.get('sha1'), checksums.get('sha256')
-            ))
+
         
         # Insert Lustre metadata (only if Lustre is enabled)
         if enable_lustre:
@@ -1078,9 +899,6 @@ def create_database_schema_json(schema_file, enable_lustre=False):
                         "lustre_version": {"type": "TEXT", "description": "Version of Lustre tools"},
                         "total_files": {"type": "INTEGER", "description": "Total number of files scanned"},
                         "total_directories": {"type": "INTEGER", "description": "Total number of directories scanned"},
-                        "restart_count": {"type": "INTEGER", "description": "Number of times scan was restarted from checkpoint"},
-                        "total_elapsed_seconds": {"type": "REAL", "description": "Total elapsed time for entire scan in seconds"},
-                        "initial_start_time": {"type": "TEXT", "description": "ISO timestamp when scan was first started"},
                         "recursive": {"type": "BOOLEAN", "description": "Whether the scan was performed recursively"},
                         "lustre_enabled": {"type": "BOOLEAN", "description": "Whether Lustre metadata collection was enabled"}
                     }
@@ -1250,16 +1068,6 @@ def create_database_schema_json(schema_file, enable_lustre=False):
                         "links": {"type": "INTEGER", "description": "Number of hard links"}
                     }
                 },
-                "file_checksums": {
-                    "description": "File checksum information",
-                    "columns": {
-                        "id": {"type": "INTEGER", "primary_key": True},
-                        "file_id": {"type": "INTEGER", "foreign_key": "files.id"},
-                        "md5": {"type": "TEXT", "description": "MD5 hash"},
-                        "sha1": {"type": "TEXT", "description": "SHA1 hash"},
-                        "sha256": {"type": "TEXT", "description": "SHA256 hash"}
-                    }
-                },
                 "extended_attributes": {
                     "description": "Extended file attributes",
                     "columns": {
@@ -1326,50 +1134,28 @@ def create_database_schema_json(schema_file, enable_lustre=False):
         json.dump(schema, f, indent=2)
 
 
-def scan_directory(directory_path, checkpoint_manager=None, recursive=False, enable_lustre=False):
-    """Scan directory and gather metadata for all files with checkpoint support."""
+def scan_directory(directory_path, recursive=False, enable_lustre=False):
+    """Scan directory and gather metadata for all files."""
     if not os.path.isdir(directory_path):
         print(f"Error: '{directory_path}' is not a directory", file=sys.stderr)
         return None
     
-    # Initialize or resume results
-    if checkpoint_manager:
-        existing_results = checkpoint_manager.load_partial_results()
-        if existing_results:
-            results = existing_results
-            print(f"Resuming with {len(results['files'])} files already processed", file=sys.stderr)
-        else:
-            scan_info = {
-                'directory': os.path.abspath(directory_path),
-                'scan_time': datetime.now().isoformat(),
-                'hostname': run_command('hostname'),
-                'recursive': recursive,
-                'lustre_enabled': enable_lustre,
-            }
-            if enable_lustre:
-                scan_info['lustre_version'] = run_command('lfs --version')
-            
-            results = {
-                'scan_info': scan_info,
-                'directories': [],
-                'files': []
-            }
-    else:
-        scan_info = {
-            'directory': os.path.abspath(directory_path),
-            'scan_time': datetime.now().isoformat(),
-            'hostname': run_command('hostname'),
-            'recursive': recursive,
-            'lustre_enabled': enable_lustre,
-        }
-        if enable_lustre:
-            scan_info['lustre_version'] = run_command('lfs --version')
-        
-        results = {
-            'scan_info': scan_info,
-            'directories': [],
-            'files': []
-        }
+    # Initialize results
+    scan_info = {
+        'directory': os.path.abspath(directory_path),
+        'scan_time': datetime.now().isoformat(),
+        'hostname': run_command('hostname'),
+        'recursive': recursive,
+        'lustre_enabled': enable_lustre,
+    }
+    if enable_lustre:
+        scan_info['lustre_version'] = run_command('lfs --version')
+    
+    results = {
+        'scan_info': scan_info,
+        'directories': [],
+        'files': []
+    }
     
     try:
         # Get list of files in directory (and subdirectories if recursive)
@@ -1398,46 +1184,33 @@ def scan_directory(directory_path, checkpoint_manager=None, recursive=False, ena
                     entries.append(item_path)
         
         # Collect directory information
-        if len(results['directories']) == 0:  # Only collect on first run, not resume
-            print(f"Collecting directory information...", file=sys.stderr)
-            directories = collect_directory_tree(directory_path, recursive)
+        print(f"Collecting directory information...", file=sys.stderr)
+        directories = collect_directory_tree(directory_path, recursive)
+        
+        for dir_path in directories:
+            print(f"Processing directory: {dir_path}", file=sys.stderr)
+            dir_metadata = get_directory_metadata(dir_path)
             
-            for dir_path in directories:
-                print(f"Processing directory: {dir_path}", file=sys.stderr)
-                dir_metadata = get_directory_metadata(dir_path)
-                
-                # Add directory metadata
-                directory_data = {
-                    'standard_metadata': dir_metadata,
-                    'extended_attributes': get_extended_attributes(dir_path),
-                    'acl_info': get_acl_info(dir_path)
-                }
-                
-                results['directories'].append(directory_data)
+            # Add directory metadata
+            directory_data = {
+                'standard_metadata': dir_metadata,
+                'extended_attributes': get_extended_attributes(dir_path),
+                'acl_info': get_acl_info(dir_path)
+            }
+            
+            results['directories'].append(directory_data)
         
-        # Filter out already processed files if resuming
-        if checkpoint_manager:
-            remaining_entries = [f for f in entries if not checkpoint_manager.is_file_processed(f)]
-            already_processed = len(entries) - len(remaining_entries)
-            if already_processed > 0:
-                print(f"Skipping {already_processed} already processed files", file=sys.stderr)
-            entries = remaining_entries
-        
-        total_files = len(entries) + len(results['files'])  # Include already processed
+        total_files = len(entries)
         scan_scope = "recursively" if recursive else ""
         print(f"Found {len(entries)} files to scan {scan_scope} in {directory_path}", file=sys.stderr)
-        if checkpoint_manager:
-            print(f"Total files {scan_scope}: {total_files}", file=sys.stderr)
         
         for i, filepath in enumerate(entries, 1):
-            current_file_number = len(results['files']) + i
-            
             # Print progress every 100 files or at the end
-            if current_file_number % 100 == 0 or i == len(entries):
-                print(f"Scanning {current_file_number}/{total_files}: {filepath}", file=sys.stderr)
+            if i % 100 == 0 or i == len(entries):
+                print(f"Scanning {i}/{total_files}: {filepath}", file=sys.stderr)
             
             file_metadata = {
-                'scan_order': current_file_number,
+                'scan_order': i,
                 'standard_metadata': get_standard_metadata(filepath),
                 'extended_attributes': get_extended_attributes(filepath),
                 'acl_info': get_acl_info(filepath)
@@ -1448,33 +1221,11 @@ def scan_directory(directory_path, checkpoint_manager=None, recursive=False, ena
                 file_metadata['lustre_metadata'] = get_lustre_metadata(filepath)
             
             results['files'].append(file_metadata)
-            
-            # Update checkpoint
-            if checkpoint_manager:
-                checkpoint_manager.mark_file_processed(filepath)
-                
-                # Save progress every 10 files for resilience
-                if current_file_number % 10 == 0 or i == len(entries):
-                    checkpoint_manager.save_progress(directory_path, total_files, current_file_number)
-                    checkpoint_manager.save_partial_results(results)
-                    
-                    # Only print checkpoint message every 100 files or at the end
-                    if current_file_number % 100 == 0 or i == len(entries):
-                        print(f"Checkpoint saved ({current_file_number}/{total_files})", file=sys.stderr)
         
         # Update final scan info
         results['scan_info']['total_files'] = total_files
         results['scan_info']['total_directories'] = len(results['directories'])
         results['scan_info']['scan_completed'] = datetime.now().isoformat()
-        
-        # Add checkpoint statistics if available
-        if checkpoint_manager:
-            scan_stats = checkpoint_manager.get_scan_stats()
-            results['scan_info'].update({
-                'checkpoint_stats': scan_stats,
-                'initial_start_time': scan_stats['initial_start_time_iso']
-            })
-            print(f"Scan completed after {scan_stats['total_elapsed_formatted']} with {scan_stats['restart_count']} restarts", file=sys.stderr)
         
     except OSError as e:
         print(f"Error scanning directory: {e}", file=sys.stderr)
@@ -1492,7 +1243,6 @@ Examples:
   %(prog)s /path/to/directory
   %(prog)s . > metadata.json
   %(prog)s /lustre/project/data --lustre --output results.json --db results.db
-  %(prog)s /path --output results.json --no-checkpoint  # Disable checkpoint/resume
   %(prog)s /path --recursive --output results.json     # Scan recursively
   %(prog)s /path --lustre --recursive --output lustre.json  # Lustre + recursive
         """
@@ -1508,10 +1258,7 @@ Examples:
                        help='Output JSON schema file (default: <db_name>_schema.json)')
     parser.add_argument('--pretty', action='store_true',
                        help='Pretty-print JSON output')
-    parser.add_argument('--no-checkpoint', action='store_true',
-                       help='Disable checkpoint/resume functionality')
-    parser.add_argument('--cleanup-only', action='store_true',
-                       help='Only cleanup checkpoint files and exit')
+
     parser.add_argument('-r', '--recursive', action='store_true',
                        help='Recursively scan subdirectories')
     parser.add_argument('--lustre', action='store_true',
@@ -1519,21 +1266,7 @@ Examples:
     
     args = parser.parse_args()
     
-    # Initialize checkpoint manager
-    checkpoint_manager = None
-    if not args.no_checkpoint:
-        checkpoint_manager = CheckpointManager(args.output, args.directory)
-        
-        # Handle cleanup-only mode
-        if args.cleanup_only:
-            checkpoint_manager.cleanup()
-            print("Checkpoint cleanup completed", file=sys.stderr)
-            sys.exit(0)
-        
-        # Setup checkpoint directory and load existing progress
-        checkpoint_manager.setup_checkpoint_dir()
-        checkpoint_manager.load_existing_progress()
-        checkpoint_manager.load_processed_files()
+
     
     # Validate directory
     if not os.path.exists(args.directory):
@@ -1546,16 +1279,14 @@ Examples:
     
     # Scan directory
     try:
-        results = scan_directory(args.directory, checkpoint_manager, args.recursive, args.lustre)
+        results = scan_directory(args.directory, args.recursive, args.lustre)
         if results is None:
             sys.exit(1)
     except KeyboardInterrupt:
-        print("\nScan interrupted. Checkpoint saved. Run again to resume.", file=sys.stderr)
+        print("\nScan interrupted.", file=sys.stderr)
         sys.exit(1)
     except Exception as e:
         print(f"Unexpected error during scan: {e}", file=sys.stderr)
-        if checkpoint_manager:
-            print(f"Checkpoint files preserved in {checkpoint_manager.temp_dir}", file=sys.stderr)
         sys.exit(1)
     
     # Output JSON results
@@ -1603,10 +1334,7 @@ Examples:
             print(f"Error writing to database {args.db}: {e}", file=sys.stderr)
             sys.exit(1)
     
-    # Cleanup checkpoint files on successful completion
-    if checkpoint_manager:
-        checkpoint_manager.cleanup()
-        print("Scan completed successfully!", file=sys.stderr)
+    print("Scan completed successfully!", file=sys.stderr)
 
 
 if __name__ == '__main__':

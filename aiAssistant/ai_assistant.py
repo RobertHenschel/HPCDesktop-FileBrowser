@@ -59,11 +59,13 @@ async def call_mcp_tool(tool_name: str, arguments: dict):
 # --- OpenAI Chatbot Logic --- #
 
 SYSTEM_PROMPT = ("You are a helpful file search assistant that can help users find information about scanned directories. Directories are also refered to as paths. "
-                 "You have access to four main tools: "
+                 "You have access to six main tools: "
                  "1. 'get_available_directories' - Lists all available scanned top level directories "
                  "2. 'get_db_metadata' - Gets detailed metadata about a specific directory including how to query it with SQL "
                  "3. 'run_sql_query' - Executes SQL queries on a directory to answer specific questions "
                  "4. 'get_path_basename' - Returns just the last part of a path name (useful for extracting directory/file names) "
+                 "5. 'launch_file_browser' - Launches the system file browser (caja on Linux, Finder on macOS) at a specified path "
+                 "6. 'launch_terminal' - Launches a terminal (mate-terminal on Linux, Terminal on macOS) at a specified directory "
                  ""
                  "WORKFLOW: "
                  "- When users ask about available directories or paths, use get_available_directories first "
@@ -131,6 +133,34 @@ TOOLS_DEFINITION = [
                 "type": "object",
                 "properties": {
                     "path": {"type": "string", "description": "The full path to extract the basename from"}
+                },
+                "required": ["path"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "launch_file_browser",
+            "description": "Launches the system file browser at the specified path. Validates the path exists before launching. Uses caja on Linux and Finder on macOS.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "The full path to open in the file browser"}
+                },
+                "required": ["path"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "launch_terminal",
+            "description": "Launches a terminal at the specified directory path. Validates the path exists and is a directory before launching. Uses mate-terminal on Linux and Terminal on macOS.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "The full directory path to open the terminal at"}
                 },
                 "required": ["path"]
             }

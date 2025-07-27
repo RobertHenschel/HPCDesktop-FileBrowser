@@ -3,6 +3,8 @@
 import os
 import sqlite3
 import json
+import platform
+import subprocess
 from mcp.server.fastmcp import FastMCP as MCDPServer, Context as ToolContext
 
 # Create the server instance first
@@ -115,10 +117,122 @@ async def get_path_basename(ctx: ToolContext, path: str) -> str:
         print(f"[MCP Server] Error getting basename for path '{path}': {e}")
         return f"Error getting basename: {str(e)}"
 
+@server.tool()
+async def launch_file_browser(ctx: ToolContext, path: str) -> str:
+    """Launches the system file browser at the specified path. Checks if path exists first."""
+    print(f"[MCP Server] Tool call: launch_file_browser, path: {path}")
+    try:
+        # Check if path exists
+        if not os.path.exists(path):
+            error_msg = f"Error: Path '{path}' does not exist"
+            print(f"[MCP Server] {error_msg}")
+            return error_msg
+        # check if it is a directory or a file, if file return error
+        if os.path.isfile(path):
+            error_msg = f"Error: Path '{path}' is a file, not a directory"
+            print(f"[MCP Server] {error_msg}")
+            return error_msg
+        
+        # Get the operating system
+        system = platform.system()
+        print(f"[MCP Server] Detected OS: {system}")
+        
+        if system == "Linux":
+            # Launch caja file manager on Linux
+            try:
+                subprocess.Popen(['caja', path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                success_msg = f"Successfully launched caja file browser for path: {path}"
+                print(f"[MCP Server] {success_msg}")
+                return success_msg
+            except FileNotFoundError:
+                error_msg = "Error: caja file manager not found. Please install caja or use a different file manager."
+                print(f"[MCP Server] {error_msg}")
+                return error_msg
+        elif system == "Darwin":  # macOS
+            # Launch Finder on macOS
+            try:
+                subprocess.Popen(['open', path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                success_msg = f"Successfully launched Finder for path: {path}"
+                print(f"[MCP Server] {success_msg}")
+                return success_msg
+            except Exception as e:
+                error_msg = f"Error launching Finder: {str(e)}"
+                print(f"[MCP Server] {error_msg}")
+                return error_msg
+        else:
+            error_msg = f"Error: Unsupported operating system '{system}'. Only Linux and macOS are supported."
+            print(f"[MCP Server] {error_msg}")
+            return error_msg
+            
+    except Exception as e:
+        error_msg = f"Error launching file browser: {str(e)}"
+        print(f"[MCP Server] {error_msg}")
+        return error_msg
+
+@server.tool()
+async def launch_terminal(ctx: ToolContext, path: str) -> str:
+    """Launches a terminal at the specified directory path. Checks if path exists and is a directory."""
+    print(f"[MCP Server] Tool call: launch_terminal, path: {path}")
+    try:
+        # Check if path exists
+        if not os.path.exists(path):
+            error_msg = f"Error: Path '{path}' does not exist"
+            print(f"[MCP Server] {error_msg}")
+            return error_msg
+        
+        # Check if it is a directory (not a file)
+        if not os.path.isdir(path):
+            error_msg = f"Error: Path '{path}' is not a directory"
+            print(f"[MCP Server] {error_msg}")
+            return error_msg
+        
+        # Get the operating system
+        system = platform.system()
+        print(f"[MCP Server] Detected OS: {system}")
+        
+        if system == "Linux":
+            # Launch mate-terminal on Linux
+            try:
+                subprocess.Popen(['mate-terminal', '--working-directory', path], 
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                success_msg = f"Successfully launched mate-terminal at directory: {path}"
+                print(f"[MCP Server] {success_msg}")
+                return success_msg
+            except FileNotFoundError:
+                error_msg = "Error: mate-terminal not found. Please install mate-terminal or use a different terminal."
+                print(f"[MCP Server] {error_msg}")
+                return error_msg
+        elif system == "Darwin":  # macOS
+            # Launch Terminal on macOS using AppleScript
+            try:
+                # Use osascript to open Terminal at the specified directory
+                applescript = f'''tell application "Terminal"
+    activate
+    do script "cd '{path}'"
+end tell'''
+                subprocess.Popen(['osascript', '-e', applescript], 
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                success_msg = f"Successfully launched Terminal at directory: {path}"
+                print(f"[MCP Server] {success_msg}")
+                return success_msg
+            except Exception as e:
+                error_msg = f"Error launching Terminal: {str(e)}"
+                print(f"[MCP Server] {error_msg}")
+                return error_msg
+        else:
+            error_msg = f"Error: Unsupported operating system '{system}'. Only Linux and macOS are supported."
+            print(f"[MCP Server] {error_msg}")
+            return error_msg
+            
+    except Exception as e:
+        error_msg = f"Error launching terminal: {str(e)}"
+        print(f"[MCP Server] {error_msg}")
+        return error_msg
+
 # Make main synchronous
 def main(): 
     print("[MCP Server] Starting directory scan interfaceMCP server...")
-    print("[MCP Server] Registered tools: get_available_directories, get_db_metadata, run_sql_query, get_path_basename")
+    print("[MCP Server] Registered tools: get_available_directories, get_db_metadata, run_sql_query, get_path_basename, launch_file_browser, launch_terminal")
     # Call server.run() directly. It's expected to be a blocking call that manages its own event loop.
     server.run(transport="sse")
 

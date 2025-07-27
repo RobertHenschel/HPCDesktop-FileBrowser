@@ -334,16 +334,25 @@ def get_directory_metadata(dirpath):
         }
 
 
-def collect_directory_tree(directory_path, recursive=False):
+def collect_directory_tree(directory_path, recursive=False, max_depth=None):
     """Collect all directories that will be scanned."""
     directories = set()
     
     # Always include the root directory
-    directories.add(os.path.abspath(directory_path))
+    root_path = os.path.abspath(directory_path)
+    directories.add(root_path)
     
     if recursive:
         try:
             for root, dirs, files in os.walk(directory_path, followlinks=True):
+                # Calculate current depth relative to the starting directory
+                if max_depth is not None:
+                    current_depth = root.replace(root_path, '').count(os.sep)
+                    if current_depth >= max_depth:
+                        # Clear dirs to prevent os.walk from going deeper
+                        dirs[:] = []
+                        continue
+                
                 directories.add(os.path.abspath(root))
         except OSError:
             pass  # Handle permission errors
@@ -1149,7 +1158,7 @@ def create_database_schema_json(schema_file, enable_lustre=False):
         json.dump(schema, f, indent=2)
 
 
-def scan_directory(directory_path, recursive=False, enable_lustre=False):
+def scan_directory(directory_path, recursive=False, enable_lustre=False, max_depth=None):
     """Scan directory and gather metadata for all files."""
     if not os.path.isdir(directory_path):
         print(f"Error: '{directory_path}' is not a directory", file=sys.stderr)
@@ -1176,8 +1185,18 @@ def scan_directory(directory_path, recursive=False, enable_lustre=False):
         # Get list of files in directory (and subdirectories if recursive)
         entries = []
         if recursive:
-            print(f"Recursively scanning {directory_path}...", file=sys.stderr)
+            depth_msg = f" (max depth: {max_depth})" if max_depth is not None else ""
+            print(f"Recursively scanning {directory_path}{depth_msg}...", file=sys.stderr)
+            root_path = os.path.abspath(directory_path)
             for root, dirs, files in os.walk(directory_path, followlinks=True):
+                # Calculate current depth relative to the starting directory
+                if max_depth is not None:
+                    current_depth = root.replace(root_path, '').count(os.sep)
+                    if current_depth >= max_depth:
+                        # Clear dirs to prevent os.walk from going deeper
+                        dirs[:] = []
+                        continue
+                
                 # Sort directories and files for consistent order across runs
                 dirs.sort()
                 files.sort()
@@ -1200,7 +1219,7 @@ def scan_directory(directory_path, recursive=False, enable_lustre=False):
         
         # Collect directory information
         print(f"Collecting directory information...", file=sys.stderr)
-        directories = collect_directory_tree(directory_path, recursive)
+        directories = collect_directory_tree(directory_path, recursive, max_depth)
         
         for dir_path in directories:
             print(f"Processing directory: {dir_path}", file=sys.stderr)
@@ -1259,6 +1278,7 @@ Examples:
   %(prog)s . > metadata.json
   %(prog)s /lustre/project/data --lustre --output results.json --db results.db
   %(prog)s /path --recursive --output results.json     # Scan recursively
+  %(prog)s /path --recursive --max-depth 4 --output results.json  # Scan 4 levels deep
   %(prog)s /path --lustre --recursive --output lustre.json  # Lustre + recursive
         """
     )
@@ -1276,6 +1296,8 @@ Examples:
 
     parser.add_argument('-r', '--recursive', action='store_true',
                        help='Recursively scan subdirectories')
+    parser.add_argument('--max-depth', type=int, default=None,
+                       help='Maximum depth for recursive scanning (default: unlimited, e.g., --max-depth 4)')
     parser.add_argument('--lustre', action='store_true',
                        help='Enable Lustre-specific metadata collection (requires lfs tools)')
     
@@ -1294,7 +1316,7 @@ Examples:
     
     # Scan directory
     try:
-        results = scan_directory(args.directory, args.recursive, args.lustre)
+        results = scan_directory(args.directory, args.recursive, args.lustre, args.max_depth)
         if results is None:
             sys.exit(1)
     except KeyboardInterrupt:

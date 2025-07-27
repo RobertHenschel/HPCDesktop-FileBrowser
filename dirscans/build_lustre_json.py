@@ -411,7 +411,7 @@ def format_bytes(bytes_value):
     return f"{size:.1f} {units[unit_index]}"
 
 
-def create_database_schema(cursor):
+def create_database_schema(cursor, enable_lustre=False):
     """Create SQLite database schema for file metadata."""
     
     # Scan info table
@@ -427,7 +427,8 @@ def create_database_schema(cursor):
             restart_count INTEGER,
             total_elapsed_seconds REAL,
             initial_start_time TEXT,
-            recursive BOOLEAN
+            recursive BOOLEAN,
+            lustre_enabled BOOLEAN
         )
     ''')
     
@@ -523,27 +524,28 @@ def create_database_schema(cursor):
         )
     ''')
     
-    # Lustre metadata table
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS lustre_metadata (
-            id INTEGER PRIMARY KEY,
-            file_id INTEGER,
-            stripe_info_raw TEXT,
-            stripe_count INTEGER,
-            stripe_size INTEGER,
-            stripe_offset INTEGER,
-            pool TEXT,
-            layout_raw TEXT,
-            layout_yaml TEXT,
-            ost_indices TEXT,
-            fid TEXT,
-            component_count INTEGER,
-            components TEXT,
-            filesystem_info TEXT,
-            user_quota TEXT,
-            FOREIGN KEY (file_id) REFERENCES files (id)
-        )
-    ''')
+    # Lustre metadata table (only created if Lustre is enabled)
+    if enable_lustre:
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS lustre_metadata (
+                id INTEGER PRIMARY KEY,
+                file_id INTEGER,
+                stripe_info_raw TEXT,
+                stripe_count INTEGER,
+                stripe_size INTEGER,
+                stripe_offset INTEGER,
+                pool TEXT,
+                layout_raw TEXT,
+                layout_yaml TEXT,
+                ost_indices TEXT,
+                fid TEXT,
+                component_count INTEGER,
+                components TEXT,
+                filesystem_info TEXT,
+                user_quota TEXT,
+                FOREIGN KEY (file_id) REFERENCES files (id)
+            )
+        ''')
     
     # Extended attributes table
     cursor.execute('''
@@ -567,15 +569,15 @@ def create_database_schema(cursor):
     ''')
 
 
-def insert_scan_data_to_db(cursor, results):
+def insert_scan_data_to_db(cursor, results, enable_lustre=False):
     """Insert scan results into SQLite database."""
     
     # Insert scan info
     scan_info = results['scan_info']
     checkpoint_stats = scan_info.get('checkpoint_stats', {})
     cursor.execute('''
-        INSERT INTO scan_info (directory, scan_time, scan_completed, hostname, lustre_version, total_files, restart_count, total_elapsed_seconds, initial_start_time, recursive)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO scan_info (directory, scan_time, scan_completed, hostname, lustre_version, total_files, restart_count, total_elapsed_seconds, initial_start_time, recursive, lustre_enabled)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         scan_info.get('directory'),
         scan_info.get('scan_time'),
@@ -586,7 +588,8 @@ def insert_scan_data_to_db(cursor, results):
         checkpoint_stats.get('restart_count'),
         checkpoint_stats.get('total_elapsed_seconds'),
         scan_info.get('initial_start_time'),
-        scan_info.get('recursive')
+        scan_info.get('recursive'),
+        scan_info.get('lustre_enabled')
     ))
     
     scan_id = cursor.lastrowid
@@ -673,31 +676,32 @@ def insert_scan_data_to_db(cursor, results):
                 file_id, checksums.get('md5'), checksums.get('sha1'), checksums.get('sha256')
             ))
         
-        # Insert Lustre metadata
-        lustre_meta = file_data.get('lustre_metadata', {})
-        if lustre_meta:
-            stripe_parsed = lustre_meta.get('stripe_parsed', {})
-            cursor.execute('''
-                INSERT INTO lustre_metadata (file_id, stripe_info_raw, stripe_count, stripe_size, stripe_offset, pool,
-                                           layout_raw, layout_yaml, ost_indices, fid, component_count, components,
-                                           filesystem_info, user_quota)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                file_id,
-                lustre_meta.get('stripe_info_raw'),
-                stripe_parsed.get('stripe_count'),
-                stripe_parsed.get('stripe_size'),
-                stripe_parsed.get('stripe_offset'),
-                stripe_parsed.get('pool'),
-                lustre_meta.get('layout_raw'),
-                json.dumps(lustre_meta.get('layout_yaml')) if lustre_meta.get('layout_yaml') else None,
-                json.dumps(lustre_meta.get('ost_indices')) if lustre_meta.get('ost_indices') else None,
-                lustre_meta.get('fid'),
-                lustre_meta.get('component_count'),
-                json.dumps(lustre_meta.get('components')) if lustre_meta.get('components') else None,
-                lustre_meta.get('filesystem_info'),
-                lustre_meta.get('user_quota')
-            ))
+        # Insert Lustre metadata (only if Lustre is enabled)
+        if enable_lustre:
+            lustre_meta = file_data.get('lustre_metadata', {})
+            if lustre_meta:
+                stripe_parsed = lustre_meta.get('stripe_parsed', {})
+                cursor.execute('''
+                    INSERT INTO lustre_metadata (file_id, stripe_info_raw, stripe_count, stripe_size, stripe_offset, pool,
+                                               layout_raw, layout_yaml, ost_indices, fid, component_count, components,
+                                               filesystem_info, user_quota)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    file_id,
+                    lustre_meta.get('stripe_info_raw'),
+                    stripe_parsed.get('stripe_count'),
+                    stripe_parsed.get('stripe_size'),
+                    stripe_parsed.get('stripe_offset'),
+                    stripe_parsed.get('pool'),
+                    lustre_meta.get('layout_raw'),
+                    json.dumps(lustre_meta.get('layout_yaml')) if lustre_meta.get('layout_yaml') else None,
+                    json.dumps(lustre_meta.get('ost_indices')) if lustre_meta.get('ost_indices') else None,
+                    lustre_meta.get('fid'),
+                    lustre_meta.get('component_count'),
+                    json.dumps(lustre_meta.get('components')) if lustre_meta.get('components') else None,
+                    lustre_meta.get('filesystem_info'),
+                    lustre_meta.get('user_quota')
+                ))
         
         # Insert extended attributes
         xattr = file_data.get('extended_attributes', {})
@@ -720,7 +724,7 @@ def insert_scan_data_to_db(cursor, results):
             ))
 
 
-def create_database_schema_json(schema_file):
+def create_database_schema_json(schema_file, enable_lustre=False):
     """Create a JSON file describing the database schema."""
     schema = {
         "database_schema": {
@@ -741,7 +745,8 @@ def create_database_schema_json(schema_file):
                         "restart_count": {"type": "INTEGER", "description": "Number of times scan was restarted from checkpoint"},
                         "total_elapsed_seconds": {"type": "REAL", "description": "Total elapsed time for entire scan in seconds"},
                         "initial_start_time": {"type": "TEXT", "description": "ISO timestamp when scan was first started"},
-                        "recursive": {"type": "BOOLEAN", "description": "Whether the scan was performed recursively"}
+                        "recursive": {"type": "BOOLEAN", "description": "Whether the scan was performed recursively"},
+                        "lustre_enabled": {"type": "BOOLEAN", "description": "Whether Lustre metadata collection was enabled"}
                     }
                 },
                 "files": {
@@ -824,26 +829,6 @@ def create_database_schema_json(schema_file):
                         "sha256": {"type": "TEXT", "description": "SHA256 hash"}
                     }
                 },
-                "lustre_metadata": {
-                    "description": "Lustre-specific file metadata",
-                    "columns": {
-                        "id": {"type": "INTEGER", "primary_key": True},
-                        "file_id": {"type": "INTEGER", "foreign_key": "files.id"},
-                        "stripe_info_raw": {"type": "TEXT", "description": "Raw stripe information output"},
-                        "stripe_count": {"type": "INTEGER", "description": "Number of stripes"},
-                        "stripe_size": {"type": "INTEGER", "description": "Stripe size in bytes"},
-                        "stripe_offset": {"type": "INTEGER", "description": "Stripe offset"},
-                        "pool": {"type": "TEXT", "description": "OST pool name"},
-                        "layout_raw": {"type": "TEXT", "description": "Raw layout information"},
-                        "layout_yaml": {"type": "TEXT", "description": "Layout information in YAML format (JSON encoded)"},
-                        "ost_indices": {"type": "TEXT", "description": "OST indices (JSON encoded array)"},
-                        "fid": {"type": "TEXT", "description": "Lustre File Identifier"},
-                        "component_count": {"type": "INTEGER", "description": "Number of components"},
-                        "components": {"type": "TEXT", "description": "Component information (JSON encoded)"},
-                        "filesystem_info": {"type": "TEXT", "description": "Filesystem information"},
-                        "user_quota": {"type": "TEXT", "description": "User quota information"}
-                    }
-                },
                 "extended_attributes": {
                     "description": "Extended file attributes",
                     "columns": {
@@ -865,18 +850,42 @@ def create_database_schema_json(schema_file):
             "usage_examples": {
                 "get_all_files_from_scan": "SELECT * FROM files WHERE scan_id = 1;",
                 "get_large_files": "SELECT path, size_bytes, size_human FROM files WHERE size_bytes > 1000000 ORDER BY size_bytes DESC;",
-                "get_files_with_lustre_info": "SELECT f.path, l.stripe_count, l.stripe_size FROM files f JOIN lustre_metadata l ON f.id = l.file_id;",
                 "get_executable_files": "SELECT f.path FROM files f JOIN file_permissions p ON f.id = p.file_id WHERE p.user_executable = 1;",
                 "get_recent_files": "SELECT f.path, t.modify_time_iso FROM files f JOIN file_timestamps t ON f.id = t.file_id ORDER BY t.modify_time DESC LIMIT 10;"
             }
         }
     }
     
+    # Add Lustre-specific table and examples only if Lustre is enabled
+    if enable_lustre:
+        schema["database_schema"]["tables"]["lustre_metadata"] = {
+            "description": "Lustre-specific file metadata",
+            "columns": {
+                "id": {"type": "INTEGER", "primary_key": True},
+                "file_id": {"type": "INTEGER", "foreign_key": "files.id"},
+                "stripe_info_raw": {"type": "TEXT", "description": "Raw stripe information output"},
+                "stripe_count": {"type": "INTEGER", "description": "Number of stripes"},
+                "stripe_size": {"type": "INTEGER", "description": "Stripe size in bytes"},
+                "stripe_offset": {"type": "INTEGER", "description": "Stripe offset"},
+                "pool": {"type": "TEXT", "description": "OST pool name"},
+                "layout_raw": {"type": "TEXT", "description": "Raw layout information"},
+                "layout_yaml": {"type": "TEXT", "description": "Layout information in YAML format (JSON encoded)"},
+                "ost_indices": {"type": "TEXT", "description": "OST indices (JSON encoded array)"},
+                "fid": {"type": "TEXT", "description": "Lustre File Identifier"},
+                "component_count": {"type": "INTEGER", "description": "Number of components"},
+                "components": {"type": "TEXT", "description": "Component information (JSON encoded)"},
+                "filesystem_info": {"type": "TEXT", "description": "Filesystem information"},
+                "user_quota": {"type": "TEXT", "description": "User quota information"}
+            }
+        }
+        # Add Lustre-specific usage example
+        schema["database_schema"]["usage_examples"]["get_files_with_lustre_info"] = "SELECT f.path, l.stripe_count, l.stripe_size FROM files f JOIN lustre_metadata l ON f.id = l.file_id;"
+    
     with open(schema_file, 'w') as f:
         json.dump(schema, f, indent=2)
 
 
-def scan_directory(directory_path, checkpoint_manager=None, recursive=False):
+def scan_directory(directory_path, checkpoint_manager=None, recursive=False, enable_lustre=False):
     """Scan directory and gather metadata for all files with checkpoint support."""
     if not os.path.isdir(directory_path):
         print(f"Error: '{directory_path}' is not a directory", file=sys.stderr)
@@ -889,25 +898,33 @@ def scan_directory(directory_path, checkpoint_manager=None, recursive=False):
             results = existing_results
             print(f"Resuming with {len(results['files'])} files already processed", file=sys.stderr)
         else:
-            results = {
-                'scan_info': {
-                    'directory': os.path.abspath(directory_path),
-                    'scan_time': datetime.now().isoformat(),
-                    'hostname': run_command('hostname'),
-                    'lustre_version': run_command('lfs --version'),
-                    'recursive': recursive,
-                },
-                'files': []
-            }
-    else:
-        results = {
-            'scan_info': {
+            scan_info = {
                 'directory': os.path.abspath(directory_path),
                 'scan_time': datetime.now().isoformat(),
                 'hostname': run_command('hostname'),
-                'lustre_version': run_command('lfs --version'),
                 'recursive': recursive,
-            },
+                'lustre_enabled': enable_lustre,
+            }
+            if enable_lustre:
+                scan_info['lustre_version'] = run_command('lfs --version')
+            
+            results = {
+                'scan_info': scan_info,
+                'files': []
+            }
+    else:
+        scan_info = {
+            'directory': os.path.abspath(directory_path),
+            'scan_time': datetime.now().isoformat(),
+            'hostname': run_command('hostname'),
+            'recursive': recursive,
+            'lustre_enabled': enable_lustre,
+        }
+        if enable_lustre:
+            scan_info['lustre_version'] = run_command('lfs --version')
+        
+        results = {
+            'scan_info': scan_info,
             'files': []
         }
     
@@ -958,10 +975,13 @@ def scan_directory(directory_path, checkpoint_manager=None, recursive=False):
             file_metadata = {
                 'scan_order': current_file_number,
                 'standard_metadata': get_standard_metadata(filepath),
-                'lustre_metadata': get_lustre_metadata(filepath),
                 'extended_attributes': get_extended_attributes(filepath),
                 'acl_info': get_acl_info(filepath)
             }
+            
+            # Only gather Lustre metadata if enabled
+            if enable_lustre:
+                file_metadata['lustre_metadata'] = get_lustre_metadata(filepath)
             
             results['files'].append(file_metadata)
             
@@ -1003,9 +1023,10 @@ def main():
 Examples:
   %(prog)s /path/to/directory
   %(prog)s . > metadata.json
-  %(prog)s /lustre/project/data --output results.json --db results.db
+  %(prog)s /lustre/project/data --lustre --output results.json --db results.db
   %(prog)s /path --output results.json --no-checkpoint  # Disable checkpoint/resume
   %(prog)s /path --recursive --output results.json     # Scan recursively
+  %(prog)s /path --lustre --recursive --output lustre.json  # Lustre + recursive
         """
     )
     
@@ -1025,6 +1046,8 @@ Examples:
                        help='Only cleanup checkpoint files and exit')
     parser.add_argument('-r', '--recursive', action='store_true',
                        help='Recursively scan subdirectories')
+    parser.add_argument('--lustre', action='store_true',
+                       help='Enable Lustre-specific metadata collection (requires lfs tools)')
     
     args = parser.parse_args()
     
@@ -1055,7 +1078,7 @@ Examples:
     
     # Scan directory
     try:
-        results = scan_directory(args.directory, checkpoint_manager, args.recursive)
+        results = scan_directory(args.directory, checkpoint_manager, args.recursive, args.lustre)
         if results is None:
             sys.exit(1)
     except KeyboardInterrupt:
@@ -1089,10 +1112,10 @@ Examples:
             cursor = conn.cursor()
             
             # Create schema
-            create_database_schema(cursor)
+            create_database_schema(cursor, args.lustre)
             
             # Insert data
-            insert_scan_data_to_db(cursor, results)
+            insert_scan_data_to_db(cursor, results, args.lustre)
             
             conn.commit()
             conn.close()
@@ -1105,7 +1128,7 @@ Examples:
                 db_base = os.path.splitext(args.db)[0]
                 schema_file = f"{db_base}_schema.json"
             
-            create_database_schema_json(schema_file)
+            create_database_schema_json(schema_file, args.lustre)
             print(f"Database schema documentation written to {schema_file}", file=sys.stderr)
             
         except Exception as e:

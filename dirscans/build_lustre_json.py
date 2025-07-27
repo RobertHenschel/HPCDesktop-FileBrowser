@@ -395,6 +395,108 @@ def get_acl_info(filepath):
     return acl_data
 
 
+def get_directory_metadata(dirpath):
+    """Gather comprehensive directory metadata."""
+    try:
+        dir_stat = os.stat(dirpath)
+        
+        # Get user and group names
+        try:
+            username = pwd.getpwuid(dir_stat.st_uid).pw_name
+        except KeyError:
+            username = str(dir_stat.st_uid)
+        
+        try:
+            groupname = grp.getgrgid(dir_stat.st_gid).gr_name
+        except KeyError:
+            groupname = str(dir_stat.st_gid)
+        
+        # Count files and calculate total size
+        file_count = 0
+        total_size = 0
+        direct_files = []
+        
+        try:
+            for item in os.listdir(dirpath):
+                item_path = os.path.join(dirpath, item)
+                if os.path.isfile(item_path) or os.path.islink(item_path):
+                    file_count += 1
+                    direct_files.append(item_path)
+                    try:
+                        file_stat = os.stat(item_path)
+                        total_size += file_stat.st_size
+                    except (OSError, IOError):
+                        pass  # Skip files we can't stat
+        except OSError:
+            pass  # Handle permission errors
+        
+        metadata = {
+            'path': dirpath,
+            'basename': os.path.basename(dirpath),
+            'file_count': file_count,
+            'total_size_bytes': total_size,
+            'total_size_human': format_bytes(total_size),
+            'direct_files': direct_files,
+            'permissions': {
+                'octal': oct(dir_stat.st_mode)[-3:],
+                'symbolic': stat.filemode(dir_stat.st_mode),
+                'user_readable': bool(dir_stat.st_mode & stat.S_IRUSR),
+                'user_writable': bool(dir_stat.st_mode & stat.S_IWUSR),
+                'user_executable': bool(dir_stat.st_mode & stat.S_IXUSR),
+                'group_readable': bool(dir_stat.st_mode & stat.S_IRGRP),
+                'group_writable': bool(dir_stat.st_mode & stat.S_IWGRP),
+                'group_executable': bool(dir_stat.st_mode & stat.S_IXGRP),
+                'other_readable': bool(dir_stat.st_mode & stat.S_IROTH),
+                'other_writable': bool(dir_stat.st_mode & stat.S_IWOTH),
+                'other_executable': bool(dir_stat.st_mode & stat.S_IXOTH),
+                'setuid': bool(dir_stat.st_mode & stat.S_ISUID),
+                'setgid': bool(dir_stat.st_mode & stat.S_ISGID),
+                'sticky': bool(dir_stat.st_mode & stat.S_ISVTX)
+            },
+            'ownership': {
+                'uid': dir_stat.st_uid,
+                'gid': dir_stat.st_gid,
+                'username': username,
+                'groupname': groupname
+            },
+            'timestamps': {
+                'access_time': dir_stat.st_atime,
+                'modify_time': dir_stat.st_mtime,
+                'change_time': dir_stat.st_ctime,
+                'access_time_iso': datetime.fromtimestamp(dir_stat.st_atime).isoformat(),
+                'modify_time_iso': datetime.fromtimestamp(dir_stat.st_mtime).isoformat(),
+                'change_time_iso': datetime.fromtimestamp(dir_stat.st_ctime).isoformat()
+            },
+            'inode': {
+                'number': dir_stat.st_ino,
+                'device': dir_stat.st_dev,
+                'links': dir_stat.st_nlink
+            }
+        }
+        
+        return metadata
+        
+    except (OSError, IOError) as e:
+        return {'error': f"Could not get directory metadata: {str(e)}"}
+
+
+def collect_directory_tree(directory_path, recursive=False):
+    """Collect all directories that will be scanned."""
+    directories = set()
+    
+    # Always include the root directory
+    directories.add(os.path.abspath(directory_path))
+    
+    if recursive:
+        try:
+            for root, dirs, files in os.walk(directory_path, followlinks=True):
+                directories.add(os.path.abspath(root))
+        except OSError:
+            pass  # Handle permission errors
+    
+    return sorted(directories)
+
+
 def format_bytes(bytes_value):
     """Convert bytes to human readable format."""
     if bytes_value == 0:
@@ -424,11 +526,124 @@ def create_database_schema(cursor, enable_lustre=False):
             hostname TEXT,
             lustre_version TEXT,
             total_files INTEGER,
+            total_directories INTEGER,
             restart_count INTEGER,
             total_elapsed_seconds REAL,
             initial_start_time TEXT,
             recursive BOOLEAN,
             lustre_enabled BOOLEAN
+        )
+    ''')
+    
+    # Directories table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS directories (
+            id INTEGER PRIMARY KEY,
+            scan_id INTEGER,
+            path TEXT NOT NULL,
+            basename TEXT,
+            parent_directory_id INTEGER,
+            file_count INTEGER,
+            total_size_bytes INTEGER,
+            total_size_human TEXT,
+            error_message TEXT,
+            FOREIGN KEY (scan_id) REFERENCES scan_info (id),
+            FOREIGN KEY (parent_directory_id) REFERENCES directories (id)
+        )
+    ''')
+    
+    # Directory permissions table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS directory_permissions (
+            id INTEGER PRIMARY KEY,
+            directory_id INTEGER,
+            octal TEXT,
+            symbolic TEXT,
+            user_readable BOOLEAN,
+            user_writable BOOLEAN,
+            user_executable BOOLEAN,
+            group_readable BOOLEAN,
+            group_writable BOOLEAN,
+            group_executable BOOLEAN,
+            other_readable BOOLEAN,
+            other_writable BOOLEAN,
+            other_executable BOOLEAN,
+            setuid BOOLEAN,
+            setgid BOOLEAN,
+            sticky BOOLEAN,
+            FOREIGN KEY (directory_id) REFERENCES directories (id)
+        )
+    ''')
+    
+    # Directory ownership table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS directory_ownership (
+            id INTEGER PRIMARY KEY,
+            directory_id INTEGER,
+            uid INTEGER,
+            gid INTEGER,
+            username TEXT,
+            groupname TEXT,
+            FOREIGN KEY (directory_id) REFERENCES directories (id)
+        )
+    ''')
+    
+    # Directory timestamps table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS directory_timestamps (
+            id INTEGER PRIMARY KEY,
+            directory_id INTEGER,
+            access_time REAL,
+            modify_time REAL,
+            change_time REAL,
+            access_time_iso TEXT,
+            modify_time_iso TEXT,
+            change_time_iso TEXT,
+            FOREIGN KEY (directory_id) REFERENCES directories (id)
+        )
+    ''')
+    
+    # Directory inodes table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS directory_inodes (
+            id INTEGER PRIMARY KEY,
+            directory_id INTEGER,
+            inode_number INTEGER,
+            device INTEGER,
+            links INTEGER,
+            FOREIGN KEY (directory_id) REFERENCES directories (id)
+        )
+    ''')
+    
+    # Directory extended attributes table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS directory_extended_attributes (
+            id INTEGER PRIMARY KEY,
+            directory_id INTEGER,
+            all_attributes TEXT,
+            selinux TEXT,
+            FOREIGN KEY (directory_id) REFERENCES directories (id)
+        )
+    ''')
+    
+    # Directory ACL info table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS directory_acl_info (
+            id INTEGER PRIMARY KEY,
+            directory_id INTEGER,
+            posix_acl TEXT,
+            FOREIGN KEY (directory_id) REFERENCES directories (id)
+        )
+    ''')
+    
+    # Directory-file relationship table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS directory_files (
+            id INTEGER PRIMARY KEY,
+            directory_id INTEGER,
+            file_id INTEGER,
+            FOREIGN KEY (directory_id) REFERENCES directories (id),
+            FOREIGN KEY (file_id) REFERENCES files (id)
         )
     ''')
     
@@ -445,7 +660,9 @@ def create_database_schema(cursor, enable_lustre=False):
             file_type TEXT,
             symlink_target TEXT,
             error_message TEXT,
-            FOREIGN KEY (scan_id) REFERENCES scan_info (id)
+            directory_id INTEGER,
+            FOREIGN KEY (scan_id) REFERENCES scan_info (id),
+            FOREIGN KEY (directory_id) REFERENCES directories (id)
         )
     ''')
     
@@ -576,8 +793,8 @@ def insert_scan_data_to_db(cursor, results, enable_lustre=False):
     scan_info = results['scan_info']
     checkpoint_stats = scan_info.get('checkpoint_stats', {})
     cursor.execute('''
-        INSERT INTO scan_info (directory, scan_time, scan_completed, hostname, lustre_version, total_files, restart_count, total_elapsed_seconds, initial_start_time, recursive, lustre_enabled)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO scan_info (directory, scan_time, scan_completed, hostname, lustre_version, total_files, total_directories, restart_count, total_elapsed_seconds, initial_start_time, recursive, lustre_enabled)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         scan_info.get('directory'),
         scan_info.get('scan_time'),
@@ -585,6 +802,7 @@ def insert_scan_data_to_db(cursor, results, enable_lustre=False):
         scan_info.get('hostname'),
         scan_info.get('lustre_version'),
         scan_info.get('total_files'),
+        scan_info.get('total_directories'),
         checkpoint_stats.get('restart_count'),
         checkpoint_stats.get('total_elapsed_seconds'),
         scan_info.get('initial_start_time'),
@@ -594,14 +812,123 @@ def insert_scan_data_to_db(cursor, results, enable_lustre=False):
     
     scan_id = cursor.lastrowid
     
+    # Insert directory data first
+    directory_id_map = {}  # Map directory path to database ID
+    for dir_data in results['directories']:
+        dir_meta = dir_data.get('standard_metadata', {})
+        
+        # Find parent directory ID
+        parent_dir_id = None
+        dir_path = dir_meta.get('path')
+        if dir_path:
+            parent_path = os.path.dirname(dir_path)
+            if parent_path != dir_path and parent_path in directory_id_map:
+                parent_dir_id = directory_id_map[parent_path]
+        
+        # Insert main directory record
+        cursor.execute('''
+            INSERT INTO directories (scan_id, path, basename, parent_directory_id, file_count, total_size_bytes, total_size_human, error_message)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            scan_id,
+            dir_meta.get('path'),
+            dir_meta.get('basename'),
+            parent_dir_id,
+            dir_meta.get('file_count'),
+            dir_meta.get('total_size_bytes'),
+            dir_meta.get('total_size_human'),
+            dir_meta.get('error')
+        ))
+        
+        directory_id = cursor.lastrowid
+        if dir_path:
+            directory_id_map[dir_path] = directory_id
+        
+        # Insert directory permissions
+        perms = dir_meta.get('permissions', {})
+        if perms:
+            cursor.execute('''
+                INSERT INTO directory_permissions (directory_id, octal, symbolic, user_readable, user_writable, user_executable,
+                                                 group_readable, group_writable, group_executable,
+                                                 other_readable, other_writable, other_executable,
+                                                 setuid, setgid, sticky)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                directory_id, perms.get('octal'), perms.get('symbolic'),
+                perms.get('user_readable'), perms.get('user_writable'), perms.get('user_executable'),
+                perms.get('group_readable'), perms.get('group_writable'), perms.get('group_executable'),
+                perms.get('other_readable'), perms.get('other_writable'), perms.get('other_executable'),
+                perms.get('setuid'), perms.get('setgid'), perms.get('sticky')
+            ))
+        
+        # Insert directory ownership
+        ownership = dir_meta.get('ownership', {})
+        if ownership:
+            cursor.execute('''
+                INSERT INTO directory_ownership (directory_id, uid, gid, username, groupname)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (
+                directory_id, ownership.get('uid'), ownership.get('gid'),
+                ownership.get('username'), ownership.get('groupname')
+            ))
+        
+        # Insert directory timestamps
+        timestamps = dir_meta.get('timestamps', {})
+        if timestamps:
+            cursor.execute('''
+                INSERT INTO directory_timestamps (directory_id, access_time, modify_time, change_time,
+                                                access_time_iso, modify_time_iso, change_time_iso)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                directory_id, timestamps.get('access_time'), timestamps.get('modify_time'), timestamps.get('change_time'),
+                timestamps.get('access_time_iso'), timestamps.get('modify_time_iso'), timestamps.get('change_time_iso')
+            ))
+        
+        # Insert directory inode info
+        inode = dir_meta.get('inode', {})
+        if inode:
+            cursor.execute('''
+                INSERT INTO directory_inodes (directory_id, inode_number, device, links)
+                VALUES (?, ?, ?, ?)
+            ''', (
+                directory_id, inode.get('number'), inode.get('device'), inode.get('links')
+            ))
+        
+        # Insert directory extended attributes
+        xattr = dir_data.get('extended_attributes', {})
+        if xattr:
+            cursor.execute('''
+                INSERT INTO directory_extended_attributes (directory_id, all_attributes, selinux)
+                VALUES (?, ?, ?)
+            ''', (
+                directory_id, xattr.get('all_attributes'), xattr.get('selinux')
+            ))
+        
+        # Insert directory ACL info
+        acl = dir_data.get('acl_info', {})
+        if acl:
+            cursor.execute('''
+                INSERT INTO directory_acl_info (directory_id, posix_acl)
+                VALUES (?, ?)
+            ''', (
+                directory_id, acl.get('posix_acl')
+            ))
+    
     # Insert file data
     for file_data in results['files']:
         std_meta = file_data.get('standard_metadata', {})
         
+        # Find directory ID for this file
+        file_directory_id = None
+        file_path = std_meta.get('path')
+        if file_path:
+            file_dir_path = os.path.dirname(file_path)
+            file_directory_id = directory_id_map.get(file_dir_path)
+        
         # Insert main file record
         cursor.execute('''
-            INSERT INTO files (scan_id, scan_order, path, basename, size_bytes, size_human, file_type, symlink_target, error_message)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO files (scan_id, scan_order, path, basename, size_bytes, size_human, file_type, symlink_target, error_message, directory_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             scan_id,
             file_data.get('scan_order'),
@@ -611,10 +938,18 @@ def insert_scan_data_to_db(cursor, results, enable_lustre=False):
             std_meta.get('size_human'),
             std_meta.get('type'),
             std_meta.get('symlink_target'),
-            std_meta.get('error')
+            std_meta.get('error'),
+            file_directory_id
         ))
         
         file_id = cursor.lastrowid
+        
+        # Create directory-file relationship
+        if file_directory_id:
+            cursor.execute('''
+                INSERT INTO directory_files (directory_id, file_id)
+                VALUES (?, ?)
+            ''', (file_directory_id, file_id))
         
         # Insert permissions
         perms = std_meta.get('permissions', {})
@@ -742,11 +1077,106 @@ def create_database_schema_json(schema_file, enable_lustre=False):
                         "hostname": {"type": "TEXT", "description": "Hostname where scan was performed"},
                         "lustre_version": {"type": "TEXT", "description": "Version of Lustre tools"},
                         "total_files": {"type": "INTEGER", "description": "Total number of files scanned"},
+                        "total_directories": {"type": "INTEGER", "description": "Total number of directories scanned"},
                         "restart_count": {"type": "INTEGER", "description": "Number of times scan was restarted from checkpoint"},
                         "total_elapsed_seconds": {"type": "REAL", "description": "Total elapsed time for entire scan in seconds"},
                         "initial_start_time": {"type": "TEXT", "description": "ISO timestamp when scan was first started"},
                         "recursive": {"type": "BOOLEAN", "description": "Whether the scan was performed recursively"},
                         "lustre_enabled": {"type": "BOOLEAN", "description": "Whether Lustre metadata collection was enabled"}
+                    }
+                },
+                "directories": {
+                    "description": "Directory information and metadata",
+                    "columns": {
+                        "id": {"type": "INTEGER", "primary_key": True, "description": "Unique directory record identifier"},
+                        "scan_id": {"type": "INTEGER", "foreign_key": "scan_info.id", "description": "Reference to scan"},
+                        "path": {"type": "TEXT", "description": "Full path to the directory"},
+                        "basename": {"type": "TEXT", "description": "Directory basename"},
+                        "parent_directory_id": {"type": "INTEGER", "foreign_key": "directories.id", "description": "Reference to parent directory"},
+                        "file_count": {"type": "INTEGER", "description": "Number of direct files in directory"},
+                        "total_size_bytes": {"type": "INTEGER", "description": "Total size of all files in directory in bytes"},
+                        "total_size_human": {"type": "TEXT", "description": "Human-readable total size"},
+                        "error_message": {"type": "TEXT", "description": "Error message if metadata collection failed"}
+                    }
+                },
+                "directory_permissions": {
+                    "description": "Directory permission information",
+                    "columns": {
+                        "id": {"type": "INTEGER", "primary_key": True},
+                        "directory_id": {"type": "INTEGER", "foreign_key": "directories.id"},
+                        "octal": {"type": "TEXT", "description": "Octal permission representation"},
+                        "symbolic": {"type": "TEXT", "description": "Symbolic permission representation"},
+                        "user_readable": {"type": "BOOLEAN", "description": "User read permission"},
+                        "user_writable": {"type": "BOOLEAN", "description": "User write permission"},
+                        "user_executable": {"type": "BOOLEAN", "description": "User execute permission"},
+                        "group_readable": {"type": "BOOLEAN", "description": "Group read permission"},
+                        "group_writable": {"type": "BOOLEAN", "description": "Group write permission"},
+                        "group_executable": {"type": "BOOLEAN", "description": "Group execute permission"},
+                        "other_readable": {"type": "BOOLEAN", "description": "Other read permission"},
+                        "other_writable": {"type": "BOOLEAN", "description": "Other write permission"},
+                        "other_executable": {"type": "BOOLEAN", "description": "Other execute permission"},
+                        "setuid": {"type": "BOOLEAN", "description": "Set user ID bit"},
+                        "setgid": {"type": "BOOLEAN", "description": "Set group ID bit"},
+                        "sticky": {"type": "BOOLEAN", "description": "Sticky bit"}
+                    }
+                },
+                "directory_ownership": {
+                    "description": "Directory ownership information",
+                    "columns": {
+                        "id": {"type": "INTEGER", "primary_key": True},
+                        "directory_id": {"type": "INTEGER", "foreign_key": "directories.id"},
+                        "uid": {"type": "INTEGER", "description": "User ID"},
+                        "gid": {"type": "INTEGER", "description": "Group ID"},
+                        "username": {"type": "TEXT", "description": "Username"},
+                        "groupname": {"type": "TEXT", "description": "Group name"}
+                    }
+                },
+                "directory_timestamps": {
+                    "description": "Directory timestamp information",
+                    "columns": {
+                        "id": {"type": "INTEGER", "primary_key": True},
+                        "directory_id": {"type": "INTEGER", "foreign_key": "directories.id"},
+                        "access_time": {"type": "REAL", "description": "Access time (Unix timestamp)"},
+                        "modify_time": {"type": "REAL", "description": "Modify time (Unix timestamp)"},
+                        "change_time": {"type": "REAL", "description": "Change time (Unix timestamp)"},
+                        "access_time_iso": {"type": "TEXT", "description": "Access time (ISO format)"},
+                        "modify_time_iso": {"type": "TEXT", "description": "Modify time (ISO format)"},
+                        "change_time_iso": {"type": "TEXT", "description": "Change time (ISO format)"}
+                    }
+                },
+                "directory_inodes": {
+                    "description": "Directory inode information",
+                    "columns": {
+                        "id": {"type": "INTEGER", "primary_key": True},
+                        "directory_id": {"type": "INTEGER", "foreign_key": "directories.id"},
+                        "inode_number": {"type": "INTEGER", "description": "Inode number"},
+                        "device": {"type": "INTEGER", "description": "Device ID"},
+                        "links": {"type": "INTEGER", "description": "Number of hard links"}
+                    }
+                },
+                "directory_extended_attributes": {
+                    "description": "Directory extended attributes",
+                    "columns": {
+                        "id": {"type": "INTEGER", "primary_key": True},
+                        "directory_id": {"type": "INTEGER", "foreign_key": "directories.id"},
+                        "all_attributes": {"type": "TEXT", "description": "All extended attributes"},
+                        "selinux": {"type": "TEXT", "description": "SELinux security context"}
+                    }
+                },
+                "directory_acl_info": {
+                    "description": "Directory Access Control List information",
+                    "columns": {
+                        "id": {"type": "INTEGER", "primary_key": True},
+                        "directory_id": {"type": "INTEGER", "foreign_key": "directories.id"},
+                        "posix_acl": {"type": "TEXT", "description": "POSIX ACL information"}
+                    }
+                },
+                "directory_files": {
+                    "description": "Directory-file relationship mapping",
+                    "columns": {
+                        "id": {"type": "INTEGER", "primary_key": True},
+                        "directory_id": {"type": "INTEGER", "foreign_key": "directories.id", "description": "Reference to directory"},
+                        "file_id": {"type": "INTEGER", "foreign_key": "files.id", "description": "Reference to file"}
                     }
                 },
                 "files": {
@@ -761,7 +1191,8 @@ def create_database_schema_json(schema_file, enable_lustre=False):
                         "size_human": {"type": "TEXT", "description": "Human-readable file size"},
                         "file_type": {"type": "TEXT", "description": "File type (regular, directory, symlink, etc.)"},
                         "symlink_target": {"type": "TEXT", "description": "Target of symlink if applicable"},
-                        "error_message": {"type": "TEXT", "description": "Error message if metadata collection failed"}
+                        "error_message": {"type": "TEXT", "description": "Error message if metadata collection failed"},
+                        "directory_id": {"type": "INTEGER", "foreign_key": "directories.id", "description": "Reference to containing directory"}
                     }
                 },
                 "file_permissions": {
@@ -849,9 +1280,18 @@ def create_database_schema_json(schema_file, enable_lustre=False):
             },
             "usage_examples": {
                 "get_all_files_from_scan": "SELECT * FROM files WHERE scan_id = 1;",
+                "get_all_directories_from_scan": "SELECT * FROM directories WHERE scan_id = 1;",
                 "get_large_files": "SELECT path, size_bytes, size_human FROM files WHERE size_bytes > 1000000 ORDER BY size_bytes DESC;",
                 "get_executable_files": "SELECT f.path FROM files f JOIN file_permissions p ON f.id = p.file_id WHERE p.user_executable = 1;",
-                "get_recent_files": "SELECT f.path, t.modify_time_iso FROM files f JOIN file_timestamps t ON f.id = t.file_id ORDER BY t.modify_time DESC LIMIT 10;"
+                "get_recent_files": "SELECT f.path, t.modify_time_iso FROM files f JOIN file_timestamps t ON f.id = t.file_id ORDER BY t.modify_time DESC LIMIT 10;",
+                "get_directory_sizes": "SELECT path, file_count, total_size_bytes, total_size_human FROM directories ORDER BY total_size_bytes DESC;",
+                "get_files_in_directory": "SELECT f.path, f.size_human FROM files f JOIN directories d ON f.directory_id = d.id WHERE d.path = '/specific/directory/path';",
+                "get_directory_tree": "SELECT d1.path as parent, d2.path as child FROM directories d1 LEFT JOIN directories d2 ON d1.id = d2.parent_directory_id ORDER BY d1.path;",
+                "get_largest_directories": "SELECT d.path, d.file_count, d.total_size_human FROM directories d ORDER BY d.total_size_bytes DESC LIMIT 10;",
+                "get_directory_with_most_files": "SELECT path, file_count, total_size_human FROM directories ORDER BY file_count DESC LIMIT 10;",
+                "get_directory_permissions": "SELECT d.path, dp.symbolic, do.username, do.groupname FROM directories d JOIN directory_permissions dp ON d.id = dp.directory_id JOIN directory_ownership do ON d.id = do.directory_id;",
+                "get_writable_directories": "SELECT d.path FROM directories d JOIN directory_permissions dp ON d.id = dp.directory_id WHERE dp.user_writable = 1 OR dp.group_writable = 1 OR dp.other_writable = 1;",
+                "get_files_and_directories": "SELECT f.path, f.size_human, d.path as directory FROM files f JOIN directories d ON f.directory_id = d.id ORDER BY d.path, f.path;"
             }
         }
     }
@@ -878,8 +1318,9 @@ def create_database_schema_json(schema_file, enable_lustre=False):
                 "user_quota": {"type": "TEXT", "description": "User quota information"}
             }
         }
-        # Add Lustre-specific usage example
+        # Add Lustre-specific usage examples
         schema["database_schema"]["usage_examples"]["get_files_with_lustre_info"] = "SELECT f.path, l.stripe_count, l.stripe_size FROM files f JOIN lustre_metadata l ON f.id = l.file_id;"
+        schema["database_schema"]["usage_examples"]["get_lustre_files_by_directory"] = "SELECT d.path as directory, f.path as file, l.stripe_count FROM directories d JOIN files f ON d.id = f.directory_id JOIN lustre_metadata l ON f.id = l.file_id ORDER BY d.path;"
     
     with open(schema_file, 'w') as f:
         json.dump(schema, f, indent=2)
@@ -910,6 +1351,7 @@ def scan_directory(directory_path, checkpoint_manager=None, recursive=False, ena
             
             results = {
                 'scan_info': scan_info,
+                'directories': [],
                 'files': []
             }
     else:
@@ -925,6 +1367,7 @@ def scan_directory(directory_path, checkpoint_manager=None, recursive=False, ena
         
         results = {
             'scan_info': scan_info,
+            'directories': [],
             'files': []
         }
     
@@ -953,6 +1396,24 @@ def scan_directory(directory_path, checkpoint_manager=None, recursive=False, ena
                 item_path = os.path.join(directory_path, item)
                 if os.path.isfile(item_path) or os.path.islink(item_path):
                     entries.append(item_path)
+        
+        # Collect directory information
+        if len(results['directories']) == 0:  # Only collect on first run, not resume
+            print(f"Collecting directory information...", file=sys.stderr)
+            directories = collect_directory_tree(directory_path, recursive)
+            
+            for dir_path in directories:
+                print(f"Processing directory: {dir_path}", file=sys.stderr)
+                dir_metadata = get_directory_metadata(dir_path)
+                
+                # Add directory metadata
+                directory_data = {
+                    'standard_metadata': dir_metadata,
+                    'extended_attributes': get_extended_attributes(dir_path),
+                    'acl_info': get_acl_info(dir_path)
+                }
+                
+                results['directories'].append(directory_data)
         
         # Filter out already processed files if resuming
         if checkpoint_manager:
@@ -1003,6 +1464,7 @@ def scan_directory(directory_path, checkpoint_manager=None, recursive=False, ena
         
         # Update final scan info
         results['scan_info']['total_files'] = total_files
+        results['scan_info']['total_directories'] = len(results['directories'])
         results['scan_info']['scan_completed'] = datetime.now().isoformat()
         
         # Add checkpoint statistics if available

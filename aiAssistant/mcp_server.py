@@ -103,10 +103,22 @@ async def get_available_directories(ctx: ToolContext) -> str:
         print(f"[MCP Server] Error getting available directories: {e}")
         return f"Error getting available directories: {str(e)}"
 
+@server.tool()
+async def get_path_basename(ctx: ToolContext, path: str) -> str:
+    """Returns the last part of a path name (the basename)."""
+    print(f"[MCP Server] Tool call: get_path_basename, path: {path}")
+    try:
+        basename = os.path.basename(path)
+        print(f"[MCP Server] Basename of '{path}': '{basename}'")
+        return basename
+    except Exception as e:
+        print(f"[MCP Server] Error getting basename for path '{path}': {e}")
+        return f"Error getting basename: {str(e)}"
+
 # Make main synchronous
 def main(): 
     print("[MCP Server] Starting directory scan interfaceMCP server...")
-    print("[MCP Server] Registered tools: get_available_directories, get_db_metadata, run_sql_query")
+    print("[MCP Server] Registered tools: get_available_directories, get_db_metadata, run_sql_query, get_path_basename")
     # Call server.run() directly. It's expected to be a blocking call that manages its own event loop.
     server.run(transport="sse")
 

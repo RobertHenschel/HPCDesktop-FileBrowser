@@ -58,22 +58,23 @@ async def call_mcp_tool(tool_name: str, arguments: dict):
 
 # --- OpenAI Chatbot Logic --- #
 
-SYSTEM_PROMPT = ("You are a helpful file search assistant that can help users find information about scanned directories and databases. "
-                 "You have access to three main tools: "
-                 "1. 'get_available_directories' - Lists all available scanned directories from SQLite databases "
-                 "2. 'get_db_metadata' - Gets detailed metadata about a specific database including schema information "
-                 "3. 'run_sql_query' - Executes SQL queries on databases to answer specific questions "
+SYSTEM_PROMPT = ("You are a helpful file search assistant that can help users find information about scanned directories. Directories are also refered to as paths. "
+                 "You have access to four main tools: "
+                 "1. 'get_available_directories' - Lists all available scanned top level directories "
+                 "2. 'get_db_metadata' - Gets detailed metadata about a specific directory including how to query it with SQL "
+                 "3. 'run_sql_query' - Executes SQL queries on a directory to answer specific questions "
+                 "4. 'get_path_basename' - Returns just the last part of a path name (useful for extracting directory/file names) "
                  ""
                  "WORKFLOW: "
-                 "- When users ask about available directories or databases, use get_available_directories first "
-                 "- Before you write a SQL query, always get the database schema first using get_db_metadata "
+                 "- When users ask about available directories or paths, use get_available_directories first "
+                 "- Before you write a SQL query, always get the directory schema first using get_db_metadata "
                  "- When they ask specific questions about files, permissions, sizes, dates, etc., write and execute SQL queries using run_sql_query "
+                 "- Use get_path_basename when you need to extract just the directory or file name from a full path "
                  ""
                  "SQL QUERY GUIDELINES: "
-                 "- Always get the database schema first using get_db_metadata before writing complex queries "
-                 "- Use JOIN statements to combine data from related tables (files, file_permissions, file_timestamps, lustre_metadata, etc.) "
-                 "- The main tables are: files, file_permissions, file_ownership, file_timestamps, file_inodes, lustre_metadata, extended_attributes, acl_info "
-                 "- Always use proper table aliases and be specific about which database to query "
+                 "- Always get the directroy schema first using get_db_metadata before writing complex queries "
+                 "- When using get_db_metadata, only pass the name of the path, the last part of the full path as the argument - use get_path_basename if needed "
+                 "- Always use proper table aliases and be specific about which database to query (database == path)"
                  "- Format dates and file sizes in human-readable format when possible "
                  "- Limit results appropriately (the tool already limits to 100 rows) "
                  ""
@@ -118,6 +119,20 @@ TOOLS_DEFINITION = [
                     "query": {"type": "string", "description": "The SQL query to execute. Should be a valid SQLite query."}
                 },
                 "required": ["db", "query"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_path_basename",
+            "description": "Returns the last part of a path name (basename). Useful for extracting just the directory or file name from a full path.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "The full path to extract the basename from"}
+                },
+                "required": ["path"]
             }
         }
     }

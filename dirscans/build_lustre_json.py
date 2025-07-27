@@ -426,7 +426,8 @@ def create_database_schema(cursor):
             total_files INTEGER,
             restart_count INTEGER,
             total_elapsed_seconds REAL,
-            initial_start_time TEXT
+            initial_start_time TEXT,
+            recursive BOOLEAN
         )
     ''')
     
@@ -573,8 +574,8 @@ def insert_scan_data_to_db(cursor, results):
     scan_info = results['scan_info']
     checkpoint_stats = scan_info.get('checkpoint_stats', {})
     cursor.execute('''
-        INSERT INTO scan_info (directory, scan_time, scan_completed, hostname, lustre_version, total_files, restart_count, total_elapsed_seconds, initial_start_time)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO scan_info (directory, scan_time, scan_completed, hostname, lustre_version, total_files, restart_count, total_elapsed_seconds, initial_start_time, recursive)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         scan_info.get('directory'),
         scan_info.get('scan_time'),
@@ -584,7 +585,8 @@ def insert_scan_data_to_db(cursor, results):
         scan_info.get('total_files'),
         checkpoint_stats.get('restart_count'),
         checkpoint_stats.get('total_elapsed_seconds'),
-        scan_info.get('initial_start_time')
+        scan_info.get('initial_start_time'),
+        scan_info.get('recursive')
     ))
     
     scan_id = cursor.lastrowid
@@ -738,7 +740,8 @@ def create_database_schema_json(schema_file):
                         "total_files": {"type": "INTEGER", "description": "Total number of files scanned"},
                         "restart_count": {"type": "INTEGER", "description": "Number of times scan was restarted from checkpoint"},
                         "total_elapsed_seconds": {"type": "REAL", "description": "Total elapsed time for entire scan in seconds"},
-                        "initial_start_time": {"type": "TEXT", "description": "ISO timestamp when scan was first started"}
+                        "initial_start_time": {"type": "TEXT", "description": "ISO timestamp when scan was first started"},
+                        "recursive": {"type": "BOOLEAN", "description": "Whether the scan was performed recursively"}
                     }
                 },
                 "files": {
@@ -873,7 +876,7 @@ def create_database_schema_json(schema_file):
         json.dump(schema, f, indent=2)
 
 
-def scan_directory(directory_path, checkpoint_manager=None):
+def scan_directory(directory_path, checkpoint_manager=None, recursive=False):
     """Scan directory and gather metadata for all files with checkpoint support."""
     if not os.path.isdir(directory_path):
         print(f"Error: '{directory_path}' is not a directory", file=sys.stderr)
@@ -892,6 +895,7 @@ def scan_directory(directory_path, checkpoint_manager=None):
                     'scan_time': datetime.now().isoformat(),
                     'hostname': run_command('hostname'),
                     'lustre_version': run_command('lfs --version'),
+                    'recursive': recursive,
                 },
                 'files': []
             }
@@ -902,17 +906,36 @@ def scan_directory(directory_path, checkpoint_manager=None):
                 'scan_time': datetime.now().isoformat(),
                 'hostname': run_command('hostname'),
                 'lustre_version': run_command('lfs --version'),
+                'recursive': recursive,
             },
             'files': []
         }
     
     try:
-        # Get list of files in directory (not subdirectories)
+        # Get list of files in directory (and subdirectories if recursive)
         entries = []
-        for item in os.listdir(directory_path):
-            item_path = os.path.join(directory_path, item)
-            if os.path.isfile(item_path) or os.path.islink(item_path):
-                entries.append(item_path)
+        if recursive:
+            print(f"Recursively scanning {directory_path}...", file=sys.stderr)
+            for root, dirs, files in os.walk(directory_path, followlinks=True):
+                # Sort directories and files for consistent order across runs
+                dirs.sort()
+                files.sort()
+                for filename in files:
+                    item_path = os.path.join(root, filename)
+                    if os.path.isfile(item_path) or os.path.islink(item_path):
+                        entries.append(item_path)
+                # Also include symlinks that point to directories
+                for dirname in dirs:
+                    dir_path = os.path.join(root, dirname)
+                    if os.path.islink(dir_path):
+                        entries.append(dir_path)
+        else:
+            # Get list of files in directory only (not subdirectories)
+            items = sorted(os.listdir(directory_path))  # Sort for consistent order
+            for item in items:
+                item_path = os.path.join(directory_path, item)
+                if os.path.isfile(item_path) or os.path.islink(item_path):
+                    entries.append(item_path)
         
         # Filter out already processed files if resuming
         if checkpoint_manager:
@@ -923,9 +946,10 @@ def scan_directory(directory_path, checkpoint_manager=None):
             entries = remaining_entries
         
         total_files = len(entries) + len(results['files'])  # Include already processed
-        print(f"Found {len(entries)} files to scan in {directory_path}", file=sys.stderr)
+        scan_scope = "recursively" if recursive else ""
+        print(f"Found {len(entries)} files to scan {scan_scope} in {directory_path}", file=sys.stderr)
         if checkpoint_manager:
-            print(f"Total files in directory: {total_files}", file=sys.stderr)
+            print(f"Total files {scan_scope}: {total_files}", file=sys.stderr)
         
         for i, filepath in enumerate(entries, 1):
             current_file_number = len(results['files']) + i
@@ -981,6 +1005,7 @@ Examples:
   %(prog)s . > metadata.json
   %(prog)s /lustre/project/data --output results.json --db results.db
   %(prog)s /path --output results.json --no-checkpoint  # Disable checkpoint/resume
+  %(prog)s /path --recursive --output results.json     # Scan recursively
         """
     )
     
@@ -998,6 +1023,8 @@ Examples:
                        help='Disable checkpoint/resume functionality')
     parser.add_argument('--cleanup-only', action='store_true',
                        help='Only cleanup checkpoint files and exit')
+    parser.add_argument('-r', '--recursive', action='store_true',
+                       help='Recursively scan subdirectories')
     
     args = parser.parse_args()
     
@@ -1028,7 +1055,7 @@ Examples:
     
     # Scan directory
     try:
-        results = scan_directory(args.directory, checkpoint_manager)
+        results = scan_directory(args.directory, checkpoint_manager, args.recursive)
         if results is None:
             sys.exit(1)
     except KeyboardInterrupt:

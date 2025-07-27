@@ -26,3 +26,4 @@ __pycache__/foldersize_actions.cpython-311.pyc
 dirscans/*.sqlite3
 aiAssistant/config.dat
 BR200.sqlite3
+dirscans/__pycache__/build_lustre_json.cpython-313.pyc

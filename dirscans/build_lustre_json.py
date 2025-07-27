@@ -131,7 +131,11 @@ def get_standard_metadata(filepath):
         return metadata
         
     except (OSError, IOError) as e:
-        return {'error': f"Could not get standard metadata: {str(e)}"}
+        return {
+            'path': filepath,
+            'basename': os.path.basename(filepath),
+            'error': f"Could not get standard metadata: {str(e)}"
+        }
 
 
 def get_lustre_metadata(filepath):
@@ -323,7 +327,11 @@ def get_directory_metadata(dirpath):
         return metadata
         
     except (OSError, IOError) as e:
-        return {'error': f"Could not get directory metadata: {str(e)}"}
+        return {
+            'path': dirpath,
+            'basename': os.path.basename(dirpath),
+            'error': f"Could not get directory metadata: {str(e)}"
+        }
 
 
 def collect_directory_tree(directory_path, recursive=False):
@@ -646,13 +654,17 @@ def insert_scan_data_to_db(cursor, results, enable_lustre=False):
     for dir_data in results['directories']:
         dir_meta = dir_data.get('standard_metadata', {})
         
+        # Skip directories without a valid path
+        dir_path = dir_meta.get('path')
+        if not dir_path:
+            print(f"Warning: Skipping directory with no path in metadata", file=sys.stderr)
+            continue
+        
         # Find parent directory ID
         parent_dir_id = None
-        dir_path = dir_meta.get('path')
-        if dir_path:
-            parent_path = os.path.dirname(dir_path)
-            if parent_path != dir_path and parent_path in directory_id_map:
-                parent_dir_id = directory_id_map[parent_path]
+        parent_path = os.path.dirname(dir_path)
+        if parent_path != dir_path and parent_path in directory_id_map:
+            parent_dir_id = directory_id_map[parent_path]
         
         # Insert main directory record
         cursor.execute('''
@@ -670,8 +682,7 @@ def insert_scan_data_to_db(cursor, results, enable_lustre=False):
         ))
         
         directory_id = cursor.lastrowid
-        if dir_path:
-            directory_id_map[dir_path] = directory_id
+        directory_id_map[dir_path] = directory_id
         
         # Insert directory permissions
         perms = dir_meta.get('permissions', {})
@@ -747,12 +758,16 @@ def insert_scan_data_to_db(cursor, results, enable_lustre=False):
     for file_data in results['files']:
         std_meta = file_data.get('standard_metadata', {})
         
+        # Skip files without a valid path
+        file_path = std_meta.get('path')
+        if not file_path:
+            print(f"Warning: Skipping file with no path in metadata", file=sys.stderr)
+            continue
+        
         # Find directory ID for this file
         file_directory_id = None
-        file_path = std_meta.get('path')
-        if file_path:
-            file_dir_path = os.path.dirname(file_path)
-            file_directory_id = directory_id_map.get(file_dir_path)
+        file_dir_path = os.path.dirname(file_path)
+        file_directory_id = directory_id_map.get(file_dir_path)
         
         # Insert main file record
         cursor.execute('''

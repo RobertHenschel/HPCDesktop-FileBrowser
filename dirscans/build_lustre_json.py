@@ -970,7 +970,10 @@ def scan_directory(directory_path, checkpoint_manager=None, recursive=False, ena
         
         for i, filepath in enumerate(entries, 1):
             current_file_number = len(results['files']) + i
-            print(f"Scanning {current_file_number}/{total_files}: {os.path.basename(filepath)}", file=sys.stderr)
+            
+            # Print progress every 100 files or at the end
+            if current_file_number % 100 == 0 or i == len(entries):
+                print(f"Scanning {current_file_number}/{total_files}: {filepath}", file=sys.stderr)
             
             file_metadata = {
                 'scan_order': current_file_number,
@@ -989,11 +992,14 @@ def scan_directory(directory_path, checkpoint_manager=None, recursive=False, ena
             if checkpoint_manager:
                 checkpoint_manager.mark_file_processed(filepath)
                 
-                # Save progress every 10 files or at the end
+                # Save progress every 10 files for resilience
                 if current_file_number % 10 == 0 or i == len(entries):
                     checkpoint_manager.save_progress(directory_path, total_files, current_file_number)
                     checkpoint_manager.save_partial_results(results)
-                    print(f"Checkpoint saved ({current_file_number}/{total_files})", file=sys.stderr)
+                    
+                    # Only print checkpoint message every 100 files or at the end
+                    if current_file_number % 100 == 0 or i == len(entries):
+                        print(f"Checkpoint saved ({current_file_number}/{total_files})", file=sys.stderr)
         
         # Update final scan info
         results['scan_info']['total_files'] = total_files

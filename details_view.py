@@ -4,6 +4,7 @@ import grp
 import stat
 import datetime
 import platform
+import subprocess
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QTextEdit, QScrollArea
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont, QPalette
@@ -165,6 +166,8 @@ class DetailsView(QWidget):
         print(f"Current directory: {self.current_path}")
         # Add your custom logic here - you can call other functions, 
         # emit signals, show dialogs, etc.
+        # Load metadata for BR200 path.
+        subprocess.Popen(["python3", "ai_assistant.py", "--batch", f'"Load metadata for short path BR200;{clean_query}"'], cwd="./aiAssistant")
         return clean_query
         
     def set_current_directory(self, path):

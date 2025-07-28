@@ -5,10 +5,11 @@ import re
 import json
 import asyncio
 import qasync
+import argparse
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, 
                            QHBoxLayout, QWidget, QTextEdit, QLineEdit, 
                            QPushButton, QSplitter, QMessageBox)
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt5.QtGui import QFont, QTextCharFormat, QColor, QTextCursor
 from openai import OpenAI
 from mcp import ClientSession
@@ -269,9 +270,74 @@ class FileSearchChatbot(QMainWindow):
             sys.exit(1)
             
         self.message_history = [{"role": "system", "content": SYSTEM_PROMPT}]
+        self.pending_command = None  # For storing the last batch command to show in UI
         self.setup_ui()
         self.add_message("Bot", "Hello! I can help you search for information about scanned directories and databases. What would you like to know?", "normal")
+    
+    async def process_command_silently(self, user_input):
+        """Process a command without updating the UI"""
+        try:
+            self.message_history.append({"role": "user", "content": user_input})
+            
+            response = OPENAI_CLIENT.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=self.message_history,
+                tools=TOOLS_DEFINITION,
+                tool_choice="auto"
+            )
+            
+            message = response.choices[0].message
+            self.message_history.append(message)
+            
+            if message.tool_calls:
+                for tool_call in message.tool_calls:
+                    function_name = tool_call.function.name
+                    function_args = json.loads(tool_call.function.arguments)
+                    
+                    # Call MCP server
+                    tool_result = await call_mcp_tool(function_name, function_args)
+                    
+                    self.message_history.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "name": function_name,
+                        "content": str(tool_result)
+                    })
+                
+                # Get follow-up response
+                follow_up_response = OPENAI_CLIENT.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=self.message_history
+                )
+                self.message_history.append(follow_up_response.choices[0].message)
+                
+        except Exception as e:
+            # Silent processing - don't show errors in UI, but add error to history
+            error_msg = f"Error processing command '{user_input}': {str(e)}"
+            self.message_history.append({"role": "assistant", "content": error_msg})
+    
+    async def process_batch_commands(self, commands):
+        """Process a list of commands silently, except the last one which is shown in UI"""
+        commands = [cmd.strip() for cmd in commands if cmd.strip()]  # Filter out empty commands
         
+        if not commands:
+            return
+        
+        # Process all commands except the last one silently
+        for command in commands[:-1]:
+            await self.process_command_silently(command)
+        
+        # Store the last command to be processed normally after GUI is shown
+        if commands:
+            self.pending_command = commands[-1]
+    
+    def process_pending_command(self):
+        """Process the pending command normally in the UI"""
+        if self.pending_command:
+            self.input_field.setText(self.pending_command)
+            self.send_message()
+            self.pending_command = None
+    
     def setup_ui(self):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
@@ -391,6 +457,11 @@ class FileSearchChatbot(QMainWindow):
         self.input_field.setFocus()
 
 def main():
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='File Search Chatbot')
+    parser.add_argument('--batch', type=str, help='Semicolon-separated commands to run before starting GUI')
+    args = parser.parse_args()
+    
     app = QApplication(sys.argv)
     
     if not API_KEY:
@@ -399,7 +470,24 @@ def main():
         sys.exit(1)
     
     window = FileSearchChatbot()
+    
+    # Process batch commands if provided
+    if args.batch:
+        commands = args.batch.split(';')
+        
+        # Set up async event loop for batch processing
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        # Process commands silently
+        loop.run_until_complete(window.process_batch_commands(commands))
+        loop.close()
+    
     window.show()
+    
+    # Process pending command after GUI is shown
+    if hasattr(window, 'pending_command') and window.pending_command:
+        QTimer.singleShot(100, window.process_pending_command)  # Delay slightly for GUI to fully render
     
     sys.exit(app.exec_())
 

@@ -167,7 +167,7 @@ class DetailsView(QWidget):
         # Add your custom logic here - you can call other functions, 
         # emit signals, show dialogs, etc.
         # Load metadata for BR200 path.
-        subprocess.Popen(["python3", "ai_assistant.py", "--batch", f'"Load metadata for short path BR200;{clean_query}"'], cwd="./aiAssistant")
+        subprocess.Popen(["python3", "ai_assistant.py", "--batch", f'"Load metadata for short path Quartz;{clean_query}"'], cwd="./aiAssistant")
         return clean_query
         
     def set_current_directory(self, path):
@@ -295,6 +295,7 @@ class DetailsView(QWidget):
                 acl_support = True
             else:
                 acl_support = False
+            has_acls = False
             if acl_support:
                 try:
                     import posix1e
@@ -302,7 +303,6 @@ class DetailsView(QWidget):
                     # Check for extended ACL entries beyond the standard owner/group/other permissions
                     # Standard entries are: ACL_USER_OBJ, ACL_GROUP_OBJ, ACL_OTHER, ACL_MASK
                     # Extended ACLs have tag types: ACL_USER, ACL_GROUP
-                    has_acls = False
                     for entry in acl:
                         if entry.tag_type in (posix1e.ACL_USER, posix1e.ACL_GROUP):
                             has_acls = True

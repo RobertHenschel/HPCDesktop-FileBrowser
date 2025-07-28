@@ -11,6 +11,21 @@ from PyQt5.QtGui import QFont, QPalette
 from nsNotebook import NotebookWidget
 
 
+class ClickableLabel(QLabel):
+    """A clickable label that calls a function when clicked"""
+    def __init__(self, text, click_handler, parent=None):
+        super().__init__(text, parent)
+        self.click_handler = click_handler
+        self.setStyleSheet("color: #0066cc; text-decoration: underline; background-color: transparent; margin: 2px 0px;")
+        self.setCursor(Qt.PointingHandCursor)
+        self.setWordWrap(True)
+    
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.click_handler(self.text())
+        super().mousePressEvent(event)
+
+
 class DetailsView(QWidget):
     """Details view component that shows information about the current directory or selected file/folder"""
     
@@ -49,11 +64,13 @@ class DetailsView(QWidget):
         self.general_tab = self.create_general_tab()
         self.properties_tab = self.create_properties_tab()
         self.details_tab = self.create_details_tab()
+        self.insights_tab = self.create_insights_tab()
         
         tabs = [
             ("Overview", self.general_tab),
             ("ACL", self.properties_tab),
-            ("Extended Attributes", self.details_tab)
+            ("Extended Attributes", self.details_tab),
+            ("Insights", self.insights_tab)
         ]
         
         # Create notebook widget with custom tabs
@@ -108,7 +125,47 @@ class DetailsView(QWidget):
         
         return widget
     
+    def create_insights_tab(self):
+        """Create the insights tab"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(3)  # Reduce spacing between labels
 
+        # Title label
+        title_label = QLabel("<b>Run Search Queries:</b>")
+        title_label.setStyleSheet("color: #333333; background-color: transparent;")
+        layout.addWidget(title_label)
+        
+        # Store clickable labels for later updates
+        self.insights_labels = []
+        
+        # Create clickable labels for each query
+        queries = [
+            "What files and folders are not owned by me?",
+            "What files and folders can I not delete?", 
+            "What files have not been accessed in the last 30 days?",
+            "What directory has the most files?",
+            "What are the 10 largest files?"
+        ]
+        
+        for query in queries:
+            label = ClickableLabel(f"  {query}", self.handle_insights_click)
+            self.insights_labels.append(label)
+            layout.addWidget(label)
+        
+        layout.addStretch()
+        return widget
+    
+    def handle_insights_click(self, query_text):
+        """Handle clicks on insights query labels"""
+        # Remove the leading spaces from the query text
+        clean_query = query_text.strip()
+        print(f"Insights query clicked: {clean_query}")
+        print(f"Current directory: {self.current_path}")
+        # Add your custom logic here - you can call other functions, 
+        # emit signals, show dialogs, etc.
+        return clean_query
         
     def set_current_directory(self, path):
         """Update the details view with information about the current directory"""
@@ -306,6 +363,8 @@ class DetailsView(QWidget):
             self.details_label.setText(details_text)
             self.details_label.setStyleSheet("color: #333333; background-color: transparent;")
             
+            # Insights tab - now uses persistent clickable labels, no updates needed
+
 
             
         except Exception as e:
